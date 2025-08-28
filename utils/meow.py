@@ -18,4 +18,4 @@ def excel_to_csv(excel_file, csv_file):
 
 if __name__ == "__main__":
     
-    excel_to_csv("../data/Book1.xlsx", "../data/epasubregiondata.csv")
+    excel_to_csv("../data/temp/Book1.xlsx", "../data/epastatedata.csv")
