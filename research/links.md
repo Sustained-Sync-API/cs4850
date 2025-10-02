@@ -20,6 +20,8 @@ https://www.epa.gov/energy/measure-impact-your-energy-use-environment
 https://usepa.github.io/egrid-dev-portal/#
 https://catalog.data.gov/dataset/electricity-data-and-statistics-application-programming-interface-api
 https://catalog.data.gov/dataset/national-greenhouse-gas-emission-inventory
+    https://cfpub.epa.gov/ghgdata/inventoryexplorer/
+
 https://catalog.data.gov/organization/epa-gov?page=1
 https://www.kaggle.com/datasets/mannmann2/corporate-environmental-impact
 
