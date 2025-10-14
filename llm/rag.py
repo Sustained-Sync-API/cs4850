@@ -58,14 +58,55 @@ def retrieve(query, model, df, index, k=10):
     D, I = index.search(q_emb, k)
     return [df.iloc[i]['summary'] for i in I[0]]
 
+def compute_metrics_hint(df):
+    df['year'] = pd.to_datetime(df['bill_date']).dt.year
+    latest_year = df['year'].max()
+    prev_year = latest_year - 1
+
+    yearly = df.groupby(['year', 'bill_type'])[['cost', 'consumption']].sum().reset_index()
+    recent = yearly[yearly['year'].isin([prev_year, latest_year])]
+    if len(recent) < 2:
+        return ""
+
+    hint = []
+    for t in recent['bill_type'].unique():
+        curr = recent[(recent['bill_type']==t)&(recent['year']==latest_year)]
+        prev = recent[(recent['bill_type']==t)&(recent['year']==prev_year)]
+        if not curr.empty and not prev.empty:
+            delta_cost = (curr['cost'].values[0] - prev['cost'].values[0]) / prev['cost'].values[0] * 100
+            delta_use = (curr['consumption'].values[0] - prev['consumption'].values[0]) / prev['consumption'].values[0] * 100
+            hint.append(f"{t}: cost changed {delta_cost:+.1f}%, usage changed {delta_use:+.1f}% from {prev_year} to {latest_year}.")
+    return "Recent sustainability summary: " + " ".join(hint)
+
+
 # 4. LLM query with Llama 3.2
 def ask_llm(context, question):
+    # preamble = (
+    #     "You are an intelligent energy billing analyst. "
+    #     "Use the context data covering years 2015–2024 from Duluth, GA, "
+    #     "to reason clearly about consumption and cost trends.\n\n"
+    # )
     preamble = (
-        "You are an intelligent energy billing analyst. "
-        "Use the context data covering years 2015–2024 from Duluth, GA, "
-        "to reason clearly about consumption and cost trends.\n\n"
+    "You are an intelligent **energy and sustainability analyst** for a mid-sized tech company in Duluth, GA. "
+    "You are reviewing multi-year billing and consumption data (2015–2024) across power, gas, and water utilities. "
+    "Your goal is to provide **insightful, data-driven analysis** that helps the company improve both its **financial efficiency** "
+    "and **environmental sustainability**.\n\n"
+    "When analyzing, consider key sustainability metrics such as:\n"
+    "- Year-over-year changes in total and per-unit consumption.\n"
+    "- Cost per unit of energy or water used.\n"
+    "- Seasonal or regional consumption patterns.\n"
+    "- Potential carbon reduction or energy efficiency improvements.\n"
+    "- How shifts in resource usage might align with sustainability goals or company policies.\n\n"
+    "When you respond:\n"
+    "- Focus on trends, anomalies, and improvement opportunities.\n"
+    "- Quantify metrics when possible (e.g., percent increases, cost per unit).\n"
+    "- Provide actionable recommendations to improve efficiency or reduce environmental impact.\n\n"
     )
-    prompt = f"{preamble}Context:\n{context}\n\nQuestion:\n{question}\n\nAnswer with specific trends and comparisons."
+
+    # prompt = f"{preamble}Context:\n{context}\n\nQuestion:\n{question}\n\nAnswer with specific trends and comparisons."
+    hint = compute_metrics_hint(pd.read_csv(DATA_PATH))
+    prompt = f"{preamble}{hint}\n\nContext:\n{context}\n\nQuestion:\n{question}\n\nAnswer with specific trends and comparisons."
+
     res = client.chat(model="llama3.2", messages=[{"role": "user", "content": prompt}])
     return res['message']['content']
 
