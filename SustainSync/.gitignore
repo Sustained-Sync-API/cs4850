@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+# Byte-compiled / optimized / DLL files
+
+# Django
+*.log
+local_settings.py
+
+# Docker
+docker-compose.override.yml
+
+# Ollama models/cache
+ollama_data/
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+build/

@@ -1,0 +1,4 @@
+Django==5.2.7
+psycopg2-binary==2.9.10
+django-cors-headers==4.0.0
+pandas==2.2.3

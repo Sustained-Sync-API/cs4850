@@ -1,0 +1,9 @@
+# Optional ML / RAG dependencies
+# These packages are large and may require additional system libraries.
+# Install into the backend image only if you intend to run RAG in the same container.
+
+pandas==2.2.3
+torch==2.2.0
+sentence-transformers==2.2.2
+faiss-cpu==1.7.4
+transformers==4.35.2

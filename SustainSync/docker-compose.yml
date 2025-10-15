@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sustainsync}
+      POSTGRES_USER: ${POSTGRES_USER:-sustain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sustainpass}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  web:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["/bin/bash","backend/entrypoint.sh"]
+    volumes:
+      - ./:/app:rw
+      - ./data:/app/data:ro
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_HOST=ollama
+      - OLLAMA_PORT=11434
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      - OLLAMA_PORT=11434
+      # Store Ollama models in the mounted volume so model pulls persist
+      - OLLAMA_MODELS=/var/lib/ollama/models
+    env_file:
+      - .env
+    depends_on:
+      - db
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist models at /var/lib/ollama/models inside the container
+      - ollama_data:/var/lib/ollama/models
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:11434/v1/models || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - web
+
+volumes:
+  db_data:
+  ollama_data:

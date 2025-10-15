@@ -22,4 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('ask/', views.ask_rag, name='ask_rag'),
     path('forecast/', views.forecast, name='forecast'),
+    path('api/count/', views.count_bills, name='count_bills'),
 ]
