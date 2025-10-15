@@ -16,7 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from SustainSync import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('ask/', views.ask_rag, name='ask_rag'),
+    path('forecast/', views.forecast, name='forecast'),
 ]
