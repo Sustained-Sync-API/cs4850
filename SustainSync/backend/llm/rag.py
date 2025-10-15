@@ -288,7 +288,9 @@ def ask_llm(context, question):
     # client versions). Use model id with explicit tag returned by the
     # /v1/models endpoint (we expect "llama3.2:latest").
     try:
-        OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'ollama')
+        # Default to localhost so dev environments without docker-compose
+        # still work; docker-compose overrides this with service name `ollama`.
+        OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'localhost')
         OLLAMA_PORT = os.environ.get('OLLAMA_PORT', '11434')
         url = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/completions"
         payload = {
