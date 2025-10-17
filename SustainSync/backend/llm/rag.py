@@ -377,35 +377,44 @@ def ask_llm(context, question):
     )
     return fallback
 
-def forecast_trend(bills_df, periods=12):
-    """Forecast future utility spend using Prophet when available.
+def _prepare_monthly_timeseries(df):
+    """Aggregate a raw bill DataFrame into a monthly cost/usage time-series."""
 
-    Parameters
-    ----------
-    bills_df: pandas.DataFrame
-        Raw bill data loaded from the database.
-    periods: int
-        Number of future periods (months) to forecast.
-    """
-
-    if bills_df is None or bills_df.empty:
+    if df is None or df.empty:
         raise ValueError('No billing data available for forecasting')
 
-    if 'bill_date' not in bills_df.columns or 'cost' not in bills_df.columns:
+    if 'bill_date' not in df.columns or 'cost' not in df.columns:
         raise ValueError('Required bill_date or cost fields are missing for forecasting')
 
-    ts = bills_df[['bill_date', 'cost']].dropna().copy()
+    ts = df[['bill_date', 'cost', 'consumption']].dropna(subset=['bill_date', 'cost']).copy()
     if ts.empty:
         raise ValueError('Billing data does not contain any cost values for forecasting')
 
     ts['bill_date'] = pd.to_datetime(ts['bill_date'])
-    ts = ts.groupby(pd.Grouper(key='bill_date', freq='M'))['cost'].sum().reset_index()
+    ts = (
+        ts.groupby(pd.Grouper(key='bill_date', freq='ME'))
+        .agg(cost=('cost', 'sum'), consumption=('consumption', 'sum'))
+        .reset_index()
+    )
     ts = ts.sort_values('bill_date')
 
     if len(ts) < 3:
         raise ValueError('At least three months of data are required for forecasting')
 
-    history = [{'date': row['bill_date'].date().isoformat(), 'value': float(row['cost'])} for _, row in ts.iterrows()]
+    return ts
+
+
+def _forecast_from_series(ts, periods=12):
+    """Run Prophet (or a linear fallback) on a prepared monthly series."""
+
+    history = [
+        {
+            'date': row['bill_date'].date().isoformat(),
+            'value': float(row['cost']),
+            'consumption': float(row['consumption'] or 0),
+        }
+        for _, row in ts.iterrows()
+    ]
 
     prophet_forecast = None
     prophet_error = None
@@ -462,6 +471,141 @@ def forecast_trend(bills_df, periods=12):
         'warning': f'Prophet unavailable: {prophet_error}' if prophet_error else 'Prophet unavailable',
     }
 
+
+def forecast_trend(bills_df, periods=12):
+    """Forecast future utility spend for the provided bill slice."""
+
+    ts = _prepare_monthly_timeseries(bills_df)
+    return _forecast_from_series(ts, periods=periods)
+
+
+def _build_usage_context(df, forecast_result, label):
+    """Create structured context and a deterministic fallback summary for LLM calls."""
+
+    label_name = 'Total' if label == 'total' else label
+    if df is None or df.empty:
+        fallback = f"• No {label_name.lower()} data available yet. Upload bills to unlock insights."
+        return "", fallback
+
+    df = df.dropna(subset=['bill_date']).copy()
+    if df.empty:
+        fallback = f"• No {label_name.lower()} billing dates recorded yet."
+        return "", fallback
+
+    df['bill_date'] = pd.to_datetime(df['bill_date'])
+    monthly = (
+        df.groupby(pd.Grouper(key='bill_date', freq='ME'))
+        .agg(cost=('cost', 'sum'), consumption=('consumption', 'sum'))
+        .reset_index()
+        .sort_values('bill_date')
+    )
+
+    if monthly.empty:
+        fallback = f"• {label_name} billing records are missing cost values."
+        return "", fallback
+
+    lines = []
+    for _, row in monthly.tail(12).iterrows():
+        lines.append(
+            f"{row['bill_date'].date().isoformat()}: cost ${float(row['cost'] or 0):.2f}, "
+            f"usage {float(row['consumption'] or 0):.2f}"
+        )
+
+    context = (
+        f"{label_name} monthly cost and usage summary (most recent 12 months):\n" + "\n".join(lines)
+    )
+
+    latest_row = monthly.iloc[-1]
+    latest_cost = float(latest_row['cost'] or 0)
+    latest_label = latest_row['bill_date'].date().isoformat()
+    total_cost = float(monthly['cost'].sum())
+    avg_cost = float(monthly['cost'].mean())
+
+    next_forecast = None
+    if isinstance(forecast_result, dict):
+        series = forecast_result.get('series') or []
+        if series:
+            next_forecast = series[0]
+
+    fallback_lines = [
+        f"Latest month ({latest_label}) spent ${latest_cost:.2f} on {label_name.lower()} services.",
+        f"Average monthly spend is ${avg_cost:.2f}.",
+        f"Total recorded spend stands at ${total_cost:.2f}.",
+    ]
+    if next_forecast:
+        fallback_lines.append(
+            f"Upcoming forecast for {next_forecast['date']} is ${float(next_forecast['yhat']):.2f}."
+        )
+
+    fallback = "\n".join(f"• {line}" for line in fallback_lines)
+    return context, fallback
+
+
+def _summarize_usage_with_llm(label, context, fallback):
+    """Request a concise optimisation summary for the provided utility slice."""
+
+    label_name = 'Total portfolio' if label == 'total' else f"{label} usage"
+    prompt = (
+        f"Review the {label_name} metrics and forecast. "
+        "Provide three concise bullet points with actionable ideas to reduce consumption and improve sustainability."
+    )
+
+    if not context:
+        return fallback
+
+    try:
+        summary = ask_llm(context, prompt)
+        if not summary or summary.strip().lower().startswith('(llm unavailable)'):
+            return fallback
+        return summary
+    except Exception:
+        return fallback
+
+
+def forecast_trend_with_breakdown(bills_df, periods=12, include_summaries=False):
+    """Forecast totals alongside per-utility breakdowns and AI summaries.
+    
+    Args:
+        bills_df: DataFrame with bill data
+        periods: Number of periods to forecast
+        include_summaries: If True, generate LLM summaries (slow). If False, use fallback summaries.
+    """
+
+    total_forecast = forecast_trend(bills_df, periods=periods)
+    breakdown = []
+
+    default_types = pd.Series([], dtype=object)
+    bill_types = sorted({bt for bt in bills_df.get('bill_type', default_types).dropna().unique()})
+    for bill_type in bill_types:
+        subset = bills_df[bills_df['bill_type'] == bill_type]
+        try:
+            forecast_result = forecast_trend(subset, periods=periods)
+            breakdown.append({'bill_type': bill_type, **forecast_result})
+        except Exception as exc:
+            breakdown.append({'bill_type': bill_type, 'error': str(exc)})
+
+    summaries = {}
+    context, fallback = _build_usage_context(bills_df, total_forecast, 'total')
+    if include_summaries:
+        summaries['total'] = _summarize_usage_with_llm('total', context, fallback)
+    else:
+        summaries['total'] = fallback
+
+    for entry in breakdown:
+        bill_type = entry['bill_type']
+        if 'error' in entry:
+            summaries[bill_type] = f"• Unable to forecast {bill_type.lower()} yet: {entry['error']}"
+            continue
+        subset = bills_df[bills_df['bill_type'] == bill_type]
+        context, fallback = _build_usage_context(subset, entry, bill_type)
+        if include_summaries:
+            summaries[bill_type] = _summarize_usage_with_llm(bill_type, context, fallback)
+        else:
+            summaries[bill_type] = fallback
+
+    combined = {**total_forecast, 'breakdown': breakdown, 'summaries': summaries}
+    return combined
+
 # Avoid heavy initialization at import-time. We'll lazily initialize the
 # dataset, encoder model and FAISS index on first use so imports succeed in
 # environments where some ML dependencies or hardware (GPU) aren't present.
@@ -504,12 +648,19 @@ def run_query(question: str):
     return ans
 
 
-def run_forecast(periods=12):
+def run_forecast(periods=12, include_summaries=False):
+    """Run forecast with optional LLM summaries.
+    
+    Args:
+        periods: Number of periods to forecast
+        include_summaries: If True, generate LLM summaries (slow, ~2-3 minutes).
+                          If False, use fast fallback summaries.
+    """
     ensure_resources()
     if raw_df is None:
         return {'error': 'Data not available'}
     try:
-        forecast = forecast_trend(raw_df, periods=periods)
+        forecast = forecast_trend_with_breakdown(raw_df, periods=periods, include_summaries=include_summaries)
         return forecast
     except Exception as e:
         return {'error': f'Forecasting failed: {e}'}

@@ -148,6 +148,9 @@ def forecast(request):
         periods = max(1, min(24, int(periods_param)))
     except ValueError:
         periods = 12
+    
+    # Allow optional LLM summaries via query param (warning: very slow, ~2-3 minutes)
+    include_summaries = request.GET.get('summaries', '').lower() in ('true', '1', 'yes')
 
     try:
         from llm import rag as ragmod
@@ -155,7 +158,8 @@ def forecast(request):
         return JsonResponse({'error': f'RAG not available in container: {exc}'}, status=503)
 
     try:
-        result = ragmod.run_forecast(periods=periods)
+        # The LLM helper now returns total plus per-utility forecasts and summaries.
+        result = ragmod.run_forecast(periods=periods, include_summaries=include_summaries)
     except Exception as exc:
         return JsonResponse({'error': str(exc)}, status=500)
 
