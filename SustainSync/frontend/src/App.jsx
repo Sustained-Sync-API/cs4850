@@ -1,36 +1,77 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { useEffect, useState } from 'react'
+import brandLogo from './assets/brand-logo.png'
+import Dashboard from './pages/Dashboard.jsx'
+import DataEntry from './pages/DataEntry.jsx'
 import './App.css'
-import TestRag from './TestRag'
 
+const DEFAULT_ROUTE = 'dashboard'
+
+const getRouteFromHash = (fallback) => {
+  if (typeof window === 'undefined') return fallback
+  const hash = window.location.hash.replace('#', '').trim()
+  return hash || fallback
+}
+
+const useHashRoute = (defaultRoute) => {
+  const [route, setRoute] = useState(() => getRouteFromHash(defaultRoute))
+
+  useEffect(() => {
+    const syncRoute = () => setRoute(getRouteFromHash(defaultRoute))
+    syncRoute()
+    window.addEventListener('hashchange', syncRoute)
+    return () => window.removeEventListener('hashchange', syncRoute)
+  }, [defaultRoute])
+
+  const navigate = (nextRoute) => {
+    if (typeof window !== 'undefined') {
+      window.location.hash = nextRoute
+    }
+  }
+
+  return [route, navigate]
+}
+
+// Layout shell with persistent brand navigation and routed pages.
 function App() {
-  const [count, setCount] = useState(0)
+  const [route, navigate] = useHashRoute(DEFAULT_ROUTE)
+  const normalizedRoute = route === 'data-entry' ? 'data-entry' : DEFAULT_ROUTE
+  const handleNavigate = (target) => (event) => {
+    event.preventDefault()
+    navigate(target)
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <TestRag />
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="app-shell">
+      <nav className="top-nav">
+        <div className="brand">
+          <img src={brandLogo} alt="SustainSync logo" />
+          <div className="brand-copy">
+            <span className="brand-name">SustainSync</span>
+            <span className="brand-tagline">Smarter resource stewardship</span>
+          </div>
+        </div>
+        <div className="nav-links">
+          <a
+            href="#dashboard"
+            onClick={handleNavigate('dashboard')}
+            className={`nav-link${normalizedRoute === 'dashboard' ? ' nav-link--active' : ''}`}
+          >
+            Dashboard
+          </a>
+          <a
+            href="#data-entry"
+            onClick={handleNavigate('data-entry')}
+            className={`nav-link${normalizedRoute === 'data-entry' ? ' nav-link--active' : ''}`}
+          >
+            Data Entry
+          </a>
+        </div>
+      </nav>
+
+      <main className="app-content">
+        {normalizedRoute === 'data-entry' ? <DataEntry /> : <Dashboard />}
+      </main>
+    </div>
   )
 }
 

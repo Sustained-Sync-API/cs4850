@@ -21,6 +21,12 @@ from SustainSync import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('ask/', views.ask_rag, name='ask_rag'),
+    path('api/dashboard/metrics/', views.dashboard_metrics, name='dashboard_metrics'),
+    path('api/dashboard/monthly/', views.monthly_trends, name='monthly_trends'),
+    path('api/forecast/', views.forecast, name='forecast_api'),
     path('forecast/', views.forecast, name='forecast'),
+    path('api/recommendations/', views.ai_recommendations, name='ai_recommendations'),
+    path('api/bills/template/', views.download_template, name='download_template'),
+    path('api/bills/upload/', views.upload_bills, name='upload_bills'),
     path('api/count/', views.count_bills, name='count_bills'),
 ]
