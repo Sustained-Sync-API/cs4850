@@ -222,10 +222,10 @@ function QuarterlyBreakdownTable({ monthlySeries = [], forecastData = null }) {
 
   return (
     <div className="monthly-breakdown">
-      <table>
+      <table className="quarterly-table">
         <thead>
           <tr>
-            <th>Utility</th>
+            <th>Quarter</th>
             {rows.quarters.map((q) => (
               <th key={q.label}>{q.label}</th>
             ))}
@@ -233,26 +233,16 @@ function QuarterlyBreakdownTable({ monthlySeries = [], forecastData = null }) {
           </tr>
         </thead>
         <tbody>
-          {rows.utilities.map((r) => (
-            <tr key={r.utility}>
-              <td>{r.utility}</td>
-              {r.cells.map((c, idx) => (
-                <td key={idx}>{formatValueLabel(c, true)}</td>
-              ))}
-              <td>{formatValueLabel(r.total, true)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
           <tr>
             <td><strong>Total</strong></td>
             {rows.totals.map((t, idx) => (
-              <td key={idx}><strong>{formatValueLabel(t, true)}</strong></td>
+              <td key={idx}>{formatValueLabel(t, true)}</td>
             ))}
-            <td><strong>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</strong></td>
+            <td>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</td>
           </tr>
-        </tfoot>
+        </tbody>
       </table>
+
     </div>
   )
 }
@@ -831,6 +821,61 @@ function Dashboard() {
   const totals = metrics?.totals || {}
   const summaries = forecastData?.summaries || {}
 
+  // Compute average monthly cost for the most recent completed quarter and the prior quarter.
+  const quarterComparison = useMemo(() => {
+    if (!monthlySeries || monthlySeries.length === 0) return null
+
+    const sorted = [...monthlySeries].sort((a, b) => new Date(a.month) - new Date(b.month))
+    const latest = sorted[sorted.length - 1]
+    if (!latest || !latest.month) return null
+
+    const latestDate = new Date(latest.month)
+    const qStartMonth = Math.floor(latestDate.getMonth() / 3) * 3
+    const qYear = latestDate.getFullYear()
+
+    const getCost = (year, monthIndex) => {
+      const found = monthlySeries.find((s) => {
+        const d = new Date(s.month)
+        return d.getFullYear() === year && d.getMonth() === monthIndex
+      })
+      // return null when the month isn't present so we can track missing months
+      return found ? (found.total_cost || 0) : null
+    }
+
+    const pastCosts = []
+    for (let i = 0; i < 3; i++) {
+      const m = qStartMonth + i
+      const cost = getCost(qYear, m)
+      if (cost !== null) pastCosts.push(cost)
+    }
+
+    let prevStart = qStartMonth - 3
+    let prevYear = qYear
+    if (prevStart < 0) {
+      prevStart += 12
+      prevYear -= 1
+    }
+
+    const prevCosts = []
+    for (let i = 0; i < 3; i++) {
+      const m = prevStart + i
+      const cost = getCost(prevYear, m)
+      if (cost !== null) prevCosts.push(cost)
+    }
+
+    const pastSum = pastCosts.reduce((s, c) => s + c, 0)
+    const prevSum = prevCosts.reduce((s, c) => s + c, 0)
+    const pastAvg = pastCosts.length ? pastSum / pastCosts.length : null
+    const prevAvg = prevCosts.length ? prevSum / prevCosts.length : null
+    const delta = pastAvg !== null && prevAvg !== null ? pastAvg - prevAvg : null
+    const pct = delta !== null && prevAvg !== 0 ? (delta / prevAvg) * 100 : null
+
+    const quarterLabel = `Q${Math.floor(qStartMonth / 3) + 1} ${qYear}`
+    const prevQuarterLabel = `Q${Math.floor(prevStart / 3) + 1} ${prevYear}`
+
+    return { pastAvg, prevAvg, delta, pct, quarterLabel, prevQuarterLabel, pastCount: pastCosts.length, prevCount: prevCosts.length }
+  }, [monthlySeries])
+
   return (
     <div className="page-shell">
       <header className="page-header">
@@ -858,7 +903,7 @@ function Dashboard() {
           <span className="metric-value">
             {loading.metrics ? 'Loading…' : formatValueLabel(totals.cost || 0)}
           </span>
-          <span className="metric-subtitle">Across all utility bills</span>
+          <span className="metric-subtitle">Across all utility bills for the past 10 years</span>
         </div>
         <div className="metric-card">
           <span className="metric-label">Total Consumption</span>
@@ -884,14 +929,40 @@ function Dashboard() {
               </div>
             )}
           </div>
-          <span className="metric-subtitle">Across all utility types</span>
+          <span className="metric-subtitle">Across all utility types for the past 10 years</span>
         </div>
         <div className="metric-card">
           <span className="metric-label">Average Bill</span>
-          <span className="metric-value">
-            {loading.metrics ? 'Loading…' : formatValueLabel(totals.average_bill || 0)}
+          <div className="metric-value">
+            {loading.monthly ? (
+              'Loading…'
+            ) : quarterComparison && quarterComparison.pastAvg !== null ? (
+              <div>
+                <div>{formatValueLabel(quarterComparison.pastAvg, true)}</div>
+                {quarterComparison.delta !== null && (
+                  <div
+                    style={{
+                      fontSize: '0.85rem',
+                      marginTop: '6px',
+                      color: quarterComparison.delta <= 0 ? '#1b7e3a' : '#c0392b',
+                    }}
+                  >
+                    {quarterComparison.delta >= 0 ? '+' : ''}
+                    {formatValueLabel(quarterComparison.delta, true)}{' '}
+                    {quarterComparison.pct !== null ? `(${number.format(quarterComparison.pct)}%)` : ''}
+                  </div>
+                )}
+              </div>
+            ) : (
+              // fallback to the server-provided average per invoice
+              formatValueLabel(totals.average_bill || 0)
+            )}
+          </div>
+          <span className="metric-subtitle">
+            {quarterComparison && quarterComparison.pastAvg !== null
+              ? `${quarterComparison.quarterLabel} avg / mo vs ${quarterComparison.prevQuarterLabel}`
+              : 'Per invoice in the system'}
           </span>
-          <span className="metric-subtitle">Per invoice in the system</span>
         </div>
         <div className="metric-card">
           <span className="metric-label">Latest Billing Period</span>

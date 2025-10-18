@@ -457,11 +457,11 @@
   flex-direction: column;
   gap: 16px;
 }
-
 .monthly-breakdown table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 12px;
+  table-layout: fixed; /* ✅ lock equal column widths */
 }
 
 .monthly-breakdown th,
@@ -469,26 +469,22 @@
   padding: 8px 10px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   text-align: right;
+  white-space: nowrap;
 }
 
-.monthly-breakdown th {
+.monthly-breakdown th:first-child,
+.monthly-breakdown td:first-child {
   text-align: left;
+}
+
+.monthly-breakdown tbody tr:last-child td {
+  border-top: 1px solid rgba(255,255,255,0.1);
   font-weight: 700;
   color: rgba(255,255,255,0.9);
+  background-color: rgba(255,255,255,0.02);
 }
 
-.monthly-breakdown tbody tr:hover {
-  background: rgba(255,255,255,0.02);
-}
 
-.monthly-breakdown td:first-child,
-.monthly-breakdown th:first-child {
-  text-align: left;
-}
-
-.monthly-breakdown tfoot td {
-  border-top: 1px solid rgba(255,255,255,0.1);
-}
 
 .recommendation-section {
   margin: 20px 0 12px;
