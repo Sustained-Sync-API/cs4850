@@ -862,10 +862,29 @@ function Dashboard() {
         </div>
         <div className="metric-card">
           <span className="metric-label">Total Consumption</span>
-          <span className="metric-value">
-            {loading.metrics ? 'Loading…' : `${number.format(totals.consumption || 0)} units`}
-          </span>
-          <span className="metric-subtitle">Energy and water combined</span>
+          <div className="metric-value metric-value--breakdown">
+            {loading.metrics ? (
+              'Loading…'
+            ) : (
+              <div className="consumption-breakdown">
+                {(metrics?.by_type || []).map((entry) => {
+                  const type = (entry.bill_type || '').toLowerCase()
+                  const units = type.includes('power') || type.includes('electric') ? 'kWh' : type.includes('gas') ? 'therms' : type.includes('water') ? 'gallons' : 'units'
+                  return (
+                    <div key={entry.bill_type} className="consumption-row">
+                      <span className="consumption-label">{entry.bill_type}</span>
+                      <span className="consumption-value">{number.format(entry.total_consumption || 0)} {units}</span>
+                    </div>
+                  )
+                })}
+                <div className="consumption-row consumption-total">
+                  <strong>Total</strong>
+                  <strong>{number.format(totals.consumption || 0)} units</strong>
+                </div>
+              </div>
+            )}
+          </div>
+          <span className="metric-subtitle">Across all utility types</span>
         </div>
         <div className="metric-card">
           <span className="metric-label">Average Bill</span>

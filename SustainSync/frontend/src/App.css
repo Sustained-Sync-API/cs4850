@@ -906,6 +906,47 @@
   white-space: nowrap;
 }
 
+.metric-value--breakdown .consumption-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.consumption-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.consumption-row.consumption-total {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+.consumption-label {
+  color: rgba(255,255,255,0.8);
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.consumption-value {
+  color: rgba(255,255,255,0.95);
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+/* Make the metric card more compact on narrow panels */
+@media (max-width: 800px) {
+  .metric-value--breakdown .consumption-breakdown { font-size: 0.8rem; }
+  .consumption-label { max-width: 90px; }
+  .consumption-value { font-size: 0.9rem; }
+}
+
 .table-toolbar {
   display: flex;
   justify-content: space-between;
