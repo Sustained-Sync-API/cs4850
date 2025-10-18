@@ -67,14 +67,25 @@ def _build_monthly_series():
         .order_by('month')
     )
 
-    return [
-        {
-            'month': item['month'].date().isoformat() if item['month'] else None,
+    result = []
+    for item in series:
+        month_val = None
+        m = item.get('month')
+        if m:
+            # TruncMonth may return a datetime or a date depending on DB/driver.
+            # Safely handle either by checking for .date().
+            if hasattr(m, 'date'):
+                month_val = m.date().isoformat()
+            else:
+                month_val = m.isoformat()
+
+        result.append({
+            'month': month_val,
             'total_cost': _to_float(item['total_cost']),
             'total_consumption': _to_float(item['total_consumption']),
-        }
-        for item in series
-    ]
+        })
+
+    return result
 
 
 def _fallback_recommendations():

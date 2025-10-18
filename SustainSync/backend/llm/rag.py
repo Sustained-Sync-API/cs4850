@@ -409,7 +409,7 @@ def _forecast_from_series(ts, periods=12):
         {
             'date': row['bill_date'].date().isoformat(),
             'value': float(row['cost']),
-            'consumption': float(row['consumption'] or 0),
+            'usage': float(row['consumption'] or 0),
         }
         for _, row in ts.iterrows()
     ]
@@ -419,20 +419,32 @@ def _forecast_from_series(ts, periods=12):
     try:
         from prophet import Prophet
 
-        prophet_df = ts.rename(columns={'bill_date': 'ds', 'cost': 'y'})
-        model_t = Prophet(seasonality_mode='additive', yearly_seasonality=True)
-        model_t.fit(prophet_df)
-        future = model_t.make_future_dataframe(periods=periods, freq='M')
-        forecast = model_t.predict(future)
-        tail = forecast.tail(periods)
+        # Forecast cost
+        prophet_df_cost = ts.rename(columns={'bill_date': 'ds', 'cost': 'y'})
+        model_cost = Prophet(seasonality_mode='additive', yearly_seasonality=True)
+        model_cost.fit(prophet_df_cost)
+        future = model_cost.make_future_dataframe(periods=periods, freq='ME')
+        forecast_cost = model_cost.predict(future)
+        tail_cost = forecast_cost.tail(periods)
+        
+        # Forecast consumption/usage
+        prophet_df_usage = ts.rename(columns={'bill_date': 'ds', 'consumption': 'y'})
+        model_usage = Prophet(seasonality_mode='additive', yearly_seasonality=True)
+        model_usage.fit(prophet_df_usage)
+        forecast_usage = model_usage.predict(future)
+        tail_usage = forecast_usage.tail(periods)
+        
         prophet_forecast = [
             {
-                'date': row['ds'].date().isoformat(),
-                'yhat': float(row['yhat']),
-                'yhat_lower': float(row['yhat_lower']),
-                'yhat_upper': float(row['yhat_upper']),
+                'date': row_cost['ds'].date().isoformat(),
+                'yhat': float(row_cost['yhat']),
+                'yhat_lower': float(row_cost['yhat_lower']),
+                'yhat_upper': float(row_cost['yhat_upper']),
+                'yhat_usage': float(row_usage['yhat']),
+                'yhat_usage_lower': float(row_usage['yhat_lower']),
+                'yhat_usage_upper': float(row_usage['yhat_upper']),
             }
-            for _, row in tail.iterrows()
+            for (_, row_cost), (_, row_usage) in zip(tail_cost.iterrows(), tail_usage.iterrows())
         ]
     except Exception as exc:  # pragma: no cover - Prophet optional dependency
         prophet_error = str(exc)
@@ -447,19 +459,30 @@ def _forecast_from_series(ts, periods=12):
     # Fallback to a lightweight linear trend when Prophet is unavailable.
     ts = ts.reset_index(drop=True)
     ts['month_index'] = np.arange(len(ts))
-    coeffs = np.polyfit(ts['month_index'], ts['cost'], 1)
-    slope, intercept = coeffs
+    
+    # Forecast cost
+    coeffs_cost = np.polyfit(ts['month_index'], ts['cost'], 1)
+    slope_cost, intercept_cost = coeffs_cost
+    
+    # Forecast usage/consumption
+    coeffs_usage = np.polyfit(ts['month_index'], ts['consumption'].fillna(0), 1)
+    slope_usage, intercept_usage = coeffs_usage
+    
     future_index = np.arange(len(ts), len(ts) + periods)
     last_date = ts['bill_date'].max()
     future_dates = pd.date_range(last_date + pd.offsets.MonthEnd(1), periods=periods, freq='M')
     fallback_series = []
     for idx, date in zip(future_index, future_dates):
-        pred = slope * idx + intercept
+        pred_cost = slope_cost * idx + intercept_cost
+        pred_usage = slope_usage * idx + intercept_usage
         fallback_series.append({
             'date': date.date().isoformat(),
-            'yhat': float(pred),
-            'yhat_lower': float(pred),
-            'yhat_upper': float(pred),
+            'yhat': float(pred_cost),
+            'yhat_lower': float(pred_cost),
+            'yhat_upper': float(pred_cost),
+            'yhat_usage': float(pred_usage),
+            'yhat_usage_lower': float(pred_usage),
+            'yhat_usage_upper': float(pred_usage),
         })
 
     return {

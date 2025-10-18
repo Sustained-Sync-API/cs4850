@@ -19,20 +19,280 @@ const formatMonthLabel = (dateString) => {
   return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
-const formatValueLabel = (value, isCurrency = true) => {
+const formatValueLabel = (value, isCurrency = false) => {
   if (value === null || value === undefined) return '—'
   return isCurrency ? currency.format(value) : number.format(value)
 }
 
+// Build a simple 12-month cost breakdown table component
+function MonthlyBreakdownTable({ monthlySeries = [], forecastData = null }) {
+  // Build an array of the most recent 12 months (labels)
+  const months = useMemo(() => {
+    const list = monthlySeries.map((m) => m.month).filter(Boolean)
+    // last 12 months
+    const last12 = list.slice(-12)
+    return last12
+  }, [monthlySeries])
+
+  // Gather per-utility cost by month from forecastData.breakdown histories
+  const rows = useMemo(() => {
+    const breakdown = (forecastData?.breakdown || []).filter(Boolean)
+    const utilities = breakdown.map((b) => b.bill_type)
+
+    const monthKeys = months
+    const table = utilities.map((util) => {
+      const entry = breakdown.find((b) => b.bill_type === util)
+      const history = (entry?.history || []).reduce((acc, h) => {
+        acc[h.date] = h.value ?? 0
+        return acc
+      }, {})
+      const cells = monthKeys.map((m) => history[m] ?? 0)
+      const total = cells.reduce((s, v) => s + (v || 0), 0)
+      return { utility: util, cells, total }
+    })
+
+    // Add totals row from monthlySeries as fallback
+    const totals = monthKeys.map((m) => {
+      const found = monthlySeries.find((s) => s.month === m)
+      return found ? found.total_cost : 0
+    })
+
+    // Filter out utilities that are all zeros to avoid noisy rows
+    const utilitiesFiltered = table.filter((r) => r.total && r.total !== 0)
+
+    return { utilities: utilitiesFiltered, months: monthKeys, totals, hasBreakdown: utilitiesFiltered.length > 0 }
+  }, [forecastData, months, monthlySeries])
+
+  if (!rows.months || rows.months.length === 0) {
+    return <div className="empty-state">Not enough historical monthly data to show a breakdown.</div>
+  }
+
+  // If there is no per-utility breakdown (all utilities sum to zero), show totals-only with a note
+  if (!rows.hasBreakdown) {
+    return (
+      <div className="monthly-breakdown">
+        <div className="empty-state">Per-utility breakdown is unavailable for the selected months. Showing totals only.</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Month</th>
+              {rows.months.map((m) => (
+                <th key={m}>{formatMonthLabel(m)}</th>
+              ))}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Total</strong></td>
+              {rows.totals.map((t, idx) => (
+                <td key={idx}>{formatValueLabel(t, true)}</td>
+              ))}
+              <td>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  return (
+    <div className="monthly-breakdown">
+      <table>
+        <thead>
+          <tr>
+            <th>Utility</th>
+            {rows.months.map((m) => (
+              <th key={m}>{formatMonthLabel(m)}</th>
+            ))}
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.utilities.map((r) => (
+            <tr key={r.utility}>
+              <td>{r.utility}</td>
+              {r.cells.map((c, idx) => (
+                <td key={idx}>{formatValueLabel(c, true)}</td>
+              ))}
+              <td>{formatValueLabel(r.total, true)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Total</strong></td>
+            {rows.totals.map((t, idx) => (
+              <td key={idx}><strong>{formatValueLabel(t, true)}</strong></td>
+            ))}
+            <td><strong>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+}
+
+// Aggregate last 12 months into 4 calendar quarters and render a breakdown table
+function QuarterlyBreakdownTable({ monthlySeries = [], forecastData = null }) {
+  const months = useMemo(() => {
+    const list = monthlySeries.map((m) => m.month).filter(Boolean)
+    return list.slice(-12)
+  }, [monthlySeries])
+
+  // Map months to quarter labels e.g. Q1 2024
+  const quarters = useMemo(() => {
+    // Group months into 3-month windows aligned to calendar quarters
+    const qMap = {}
+    months.forEach((m) => {
+      const d = new Date(m)
+      const q = Math.floor(d.getMonth() / 3) + 1
+      const label = `Q${q} ${d.getFullYear()}`
+      if (!qMap[label]) qMap[label] = []
+      qMap[label].push(m)
+    })
+    // Keep order of appearance and only most recent 4 quarters
+    const ordered = Object.keys(qMap)
+    return ordered.slice(-4).map((label) => ({ label, months: qMap[label] }))
+  }, [months])
+
+  // Build per-utility aggregated costs per quarter
+  const rows = useMemo(() => {
+    const breakdown = (forecastData?.breakdown || []).filter(Boolean)
+    const utilities = breakdown.map((b) => b.bill_type)
+
+    const table = utilities.map((util) => {
+      const entry = breakdown.find((b) => b.bill_type === util)
+      const history = (entry?.history || []).reduce((acc, h) => {
+        acc[h.date] = h.value ?? 0
+        return acc
+      }, {})
+
+      const cells = quarters.map((q) => {
+        return q.months.reduce((sum, m) => sum + (history[m] ?? 0), 0)
+      })
+      const total = cells.reduce((s, v) => s + v, 0)
+      return { utility: util, cells, total }
+    })
+
+    // Totals per quarter from monthlySeries
+    const totals = quarters.map((q) =>
+      q.months.reduce((s, m) => {
+        const found = monthlySeries.find((s2) => s2.month === m)
+        return s + (found ? found.total_cost : 0)
+      }, 0)
+    )
+
+    // Filter empty utilities
+    const utilitiesFiltered = table.filter((r) => r.total && r.total !== 0)
+    return { utilities: utilitiesFiltered, quarters, totals, hasBreakdown: utilitiesFiltered.length > 0 }
+  }, [forecastData, quarters, monthlySeries])
+
+  if (!rows.quarters || rows.quarters.length === 0) {
+    return <div className="empty-state">Not enough historical data to display quarterly breakdown.</div>
+  }
+
+  if (!rows.hasBreakdown) {
+    return (
+      <div className="monthly-breakdown">
+        <div className="empty-state">Per-utility breakdown is unavailable for the selected quarters. Showing totals only.</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Quarter</th>
+              {rows.quarters.map((q) => (
+                <th key={q.label}>{q.label}</th>
+              ))}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Total</strong></td>
+              {rows.totals.map((t, idx) => (
+                <td key={idx}>{formatValueLabel(t, true)}</td>
+              ))}
+              <td>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  return (
+    <div className="monthly-breakdown">
+      <table>
+        <thead>
+          <tr>
+            <th>Utility</th>
+            {rows.quarters.map((q) => (
+              <th key={q.label}>{q.label}</th>
+            ))}
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.utilities.map((r) => (
+            <tr key={r.utility}>
+              <td>{r.utility}</td>
+              {r.cells.map((c, idx) => (
+                <td key={idx}>{formatValueLabel(c, true)}</td>
+              ))}
+              <td>{formatValueLabel(r.total, true)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Total</strong></td>
+            {rows.totals.map((t, idx) => (
+              <td key={idx}><strong>{formatValueLabel(t, true)}</strong></td>
+            ))}
+            <td><strong>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+}
+
+// Filter history to show only the last 3 years
+const filterLast3Years = (history = []) => {
+  if (history.length === 0) return []
+  
+  const threeYearsAgo = new Date()
+  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3)
+  
+  return history.filter(item => {
+    const itemDate = new Date(item.date)
+    return itemDate >= threeYearsAgo
+  })
+}
+
 // Convert API history entries into the structure used by charts.
 const mapHistoryToSeries = (history = []) =>
-  history.map((item) => ({
+  filterLast3Years(history).map((item) => ({
+    label: formatMonthLabel(item.date),
+    date: item.date,
+    value: item.usage ?? item.value ?? 0,
+  }))
+
+const mapHistoryToCostSeries = (history = []) =>
+  filterLast3Years(history).map((item) => ({
     label: formatMonthLabel(item.date),
     date: item.date,
     value: item.value ?? 0,
   }))
 
 const mapForecastToSeries = (series = []) =>
+  series.map((item) => ({
+    label: formatMonthLabel(item.date),
+    date: item.date,
+    value: item.yhat_usage ?? item.yhat ?? 0,
+  }))
+
+const mapForecastToCostSeries = (series = []) =>
   series.map((item) => ({
     label: formatMonthLabel(item.date),
     date: item.date,
@@ -47,9 +307,10 @@ const useAsyncState = (initialValue) => {
 }
 
 // Render a simple single-line chart for totals or breakdown cards.
-function SimpleLineChart({ actual = [], forecast = [], height = 220, responsive = false }) {
-  const padding = 36
-  const width = responsive ? 550 : 480
+function SimpleLineChart({ actual = [], forecast = [], height = 240, responsive = false, units = 'units', dataLabel = 'Value' }) {
+  const padding = 70
+  const rightPadding = 30
+  const width = responsive ? 580 : 500
 
   const combined = actual
     .map((entry, idx) => ({ ...entry, index: idx, type: 'actual' }))
@@ -71,7 +332,7 @@ function SimpleLineChart({ actual = [], forecast = [], height = 220, responsive 
 
   const xForIndex = (index) => {
     if (combined.length === 1) return width / 2
-    return padding + (index / (combined.length - 1)) * (width - padding * 2)
+    return padding + (index / (combined.length - 1)) * (width - padding - rightPadding)
   }
 
   const yForValue = (value) => {
@@ -123,7 +384,7 @@ function SimpleLineChart({ actual = [], forecast = [], height = 220, responsive 
         />
 
         {gridLines.map(({ value, y }, idx) => (
-          <text key={idx} x={padding - 12} y={y + 4} className="chart-tick">
+          <text key={idx} x={padding - 8} y={y + 4} className="chart-tick">
             {formatValueLabel(value)}
           </text>
         ))}
@@ -132,7 +393,7 @@ function SimpleLineChart({ actual = [], forecast = [], height = 220, responsive 
           if (idx % labelStride !== 0) return null
           const x = xForIndex(entry.index)
           return (
-            <text key={`label-${idx}`} x={x} y={height - padding * 0.1} className="chart-label">
+            <text key={`label-${idx}`} x={x} y={height - 8} className="chart-label">
               {entry.label}
             </text>
           )
@@ -152,6 +413,9 @@ function SimpleLineChart({ actual = [], forecast = [], height = 220, responsive 
       </svg>
 
       <div className="chart-legend">
+        <div className="chart-key">
+          <strong>Showing:</strong> {dataLabel} ({units})
+        </div>
         <div className="legend-item">
           <span className="legend-swatch legend-swatch--actual" /> Actuals
         </div>
@@ -166,13 +430,14 @@ function SimpleLineChart({ actual = [], forecast = [], height = 220, responsive 
 }
 
 // Visualise multiple utilities together with brand-coloured series.
-function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }) {
+function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 280, dataLabel = 'Value', units = 'units' }) {
   if (!datasets.length || !timeline.length) {
     return <div className="chart-empty">Forecast will appear once at least one utility has history.</div>
   }
 
-  const padding = 40
-  const width = 550
+  const padding = 70
+  const rightPadding = 30
+  const width = 600
 
   const seen = new Set()
   const orderedTimeline = []
@@ -207,7 +472,7 @@ function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }
 
   const xForIndex = (index) => {
     if (orderedTimeline.length === 1) return width / 2
-    return padding + (index / (orderedTimeline.length - 1)) * (width - padding * 2)
+    return padding + (index / (orderedTimeline.length - 1)) * (width - padding - rightPadding)
   }
 
   const buildPath = (series) =>
@@ -234,21 +499,21 @@ function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }
     <div className="chart-wrapper">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Utility comparison chart">
         {gridLines.map(({ y }, idx) => (
-          <line key={idx} x1={padding} x2={width - padding} y1={y} y2={y} className="chart-grid" />
+          <line key={idx} x1={padding} x2={width - rightPadding} y1={y} y2={y} className="chart-grid" />
         ))}
 
         <line x1={padding} x2={padding} y1={padding * 0.4} y2={height - padding * 0.4} className="chart-axis" />
         <line
           x1={padding}
-          x2={width - padding}
+          x2={width - rightPadding}
           y1={height - padding * 0.4}
           y2={height - padding * 0.4}
           className="chart-axis"
         />
 
         {gridLines.map(({ value, y }, idx) => (
-          <text key={idx} x={padding - 12} y={y + 4} className="chart-tick">
-            {formatValueLabel(value)}
+          <text key={idx} x={padding - 8} y={y + 4} className="chart-tick">
+            {formatValueLabel(value, false)}
           </text>
         ))}
 
@@ -256,7 +521,7 @@ function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }
           if (idx % labelStride !== 0) return null
           const x = xForIndex(idx)
           return (
-            <text key={entry.date} x={x} y={height - padding * 0.1} className="chart-label">
+            <text key={entry.date} x={x} y={height - 10} className="chart-label">
               {entry.label}
             </text>
           )
@@ -275,6 +540,9 @@ function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }
       </svg>
 
       <div className="chart-legend">
+        <div className="chart-key">
+          <strong>Showing:</strong> {dataLabel} ({units})
+        </div>
         {datasets.map((dataset) => (
           <div className="legend-item" key={dataset.key}>
             <span className={`legend-swatch legend-swatch--${dataset.key}`} /> {dataset.label}
@@ -483,6 +751,16 @@ function Dashboard() {
     }
   }, [forecastData])
 
+  const actualForecastCostSeries = useMemo(() => {
+    if (!forecastData || forecastData.error) {
+      return { actual: [], forecast: [] }
+    }
+    return {
+      actual: mapHistoryToCostSeries(forecastData.history || []),
+      forecast: mapForecastToCostSeries(forecastData.series || []),
+    }
+  }, [forecastData])
+
   const forecastTimeline = useMemo(() => {
     const combined = [...actualForecastSeries.actual, ...actualForecastSeries.forecast]
     const seen = new Set()
@@ -496,23 +774,20 @@ function Dashboard() {
   const multiSeriesDatasets = useMemo(() => {
     if (!forecastData || forecastData.error) return []
     const datasets = []
-    if (actualForecastSeries.actual.length || actualForecastSeries.forecast.length) {
-      datasets.push({ key: 'total', label: 'Total', actual: actualForecastSeries.actual, forecast: actualForecastSeries.forecast })
-    }
-
+    
     const breakdown = (forecastData.breakdown || []).filter((entry) => !entry.error)
     breakdown.forEach((entry) => {
       const key = entry.bill_type.toLowerCase()
       datasets.push({
         key,
         label: entry.bill_type,
-        actual: mapHistoryToSeries(entry.history || []),
-        forecast: mapForecastToSeries(entry.series || []),
+        actual: mapHistoryToCostSeries(entry.history || []),
+        forecast: mapForecastToCostSeries(entry.series || []),
       })
     })
 
     return datasets
-  }, [forecastData, actualForecastSeries])
+  }, [forecastData])
 
   const monthlyCostSeries = useMemo(
     () =>
@@ -610,10 +885,11 @@ function Dashboard() {
 
       <section className="panel">
         <div className="panel-header">
-          <h2>Monthly Spend Trends</h2>
-          <p>Visualize how actual utility costs evolve month over month.</p>
+          <h2>Quarterly Spend Trends</h2>
+          <p>Visualize how actual utility costs evolve quarter over quarter (last 4 quarters).</p>
         </div>
-        <SimpleLineChart actual={monthlyCostSeries} forecast={[]} />
+        {/* New: show last 4 quarters per-utility cost breakdown */}
+        <QuarterlyBreakdownTable monthlySeries={monthlySeries} forecastData={forecastData} />
       </section>
 
       <section className="panel">
@@ -641,9 +917,11 @@ function Dashboard() {
               <div className="tab-content">
                 <div className="forecast-chart-container">
                   <MultiSeriesForecastChart 
-                    datasets={multiSeriesDatasets.filter(ds => ds.key !== 'total')} 
+                    datasets={multiSeriesDatasets} 
                     timeline={forecastTimeline} 
                     height={240}
+                    dataLabel="Total Cost"
+                    units="USD ($)"
                   />
                 </div>
                 <div className="forecast-insights">
@@ -658,13 +936,53 @@ function Dashboard() {
                 )
                 if (!utilityData) return <div className="empty-state">No data available for this utility.</div>
 
+                // Determine units based on bill type
+                const getUnitsForUtility = (billType) => {
+                  const type = billType.toLowerCase()
+                  if (type.includes('power') || type.includes('electric')) return 'kWh'
+                  if (type.includes('gas')) return 'therms'
+                  if (type.includes('water')) return 'gallons'
+                  return 'units'
+                }
+
+                // Generate insights about the data
+                const generateDataInsights = (utilityData) => {
+                  const history = utilityData.history || []
+                  const forecast = utilityData.series || []
+                  
+                  if (history.length === 0 && forecast.length === 0) {
+                    return 'No data available'
+                  }
+
+                  const totalDataPoints = history.length + forecast.length
+                  const historicalMonths = history.length
+                  const forecastMonths = forecast.length
+
+                  let dateRange = ''
+                  if (history.length > 0) {
+                    const firstDate = new Date(history[0].date)
+                    const lastDate = new Date(history[history.length - 1].date)
+                    const startMonth = firstDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                    const endMonth = lastDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                    dateRange = `${startMonth} - ${endMonth}`
+                  }
+
+                  let insight = `Showing ${historicalMonths} month${historicalMonths !== 1 ? 's' : ''} of historical data`
+                  if (dateRange) insight += ` (${dateRange})`
+                  if (forecastMonths > 0) {
+                    insight += ` with ${forecastMonths} month${forecastMonths !== 1 ? 's' : ''} forecasted`
+                  }
+
+                  return insight
+                }
+
                 return (
                   <div className="tab-content">
                     <div className="utility-header">
                       <div>
                         <h3>{utilityData.bill_type}</h3>
                         <span className="forecast-model">
-                          {utilityData.model ? `Model: ${utilityData.model}` : 'Model unavailable'}
+                          {generateDataInsights(utilityData)}
                         </span>
                       </div>
                       {utilityData.warning && <span className="pill pill--warning">{utilityData.warning}</span>}
@@ -678,6 +996,8 @@ function Dashboard() {
                             forecast={mapForecastToSeries(utilityData.series || [])}
                             height={220}
                             responsive={true}
+                            units={getUnitsForUtility(utilityData.bill_type)}
+                            dataLabel="Consumption"
                           />
                         </div>
                         <div className="forecast-insights">

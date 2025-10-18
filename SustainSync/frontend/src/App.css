@@ -229,25 +229,32 @@
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
-  padding-bottom: 8px;
+  overflow-y: visible;
+  padding: 8px;
+  margin: -8px;
 }
 
 .chart-wrapper svg {
   width: 100%;
-  min-width: 450px;
-  max-width: 550px;
+  min-width: 500px;
+  max-width: 600px;
   height: auto;
+  overflow: visible;
 }
 
 .chart-wrapper--responsive {
   overflow-x: auto;
+  overflow-y: visible;
+  padding: 8px;
+  margin: -8px;
 }
 
 .chart-wrapper--responsive svg {
   width: 100%;
-  min-width: 450px;
-  max-width: 550px;
+  min-width: 500px;
+  max-width: 620px;
   height: auto;
+  overflow: visible;
 }
 
 .chart-grid {
@@ -302,6 +309,23 @@
   margin-top: 16px;
   font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.75);
+}
+
+.chart-key {
+  padding: 0.25rem 0.75rem;
+  background: rgba(37, 99, 235, 0.1);
+  border-left: 3px solid var(--brand-lime);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--brand-lime);
+  margin-right: auto;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.chart-key strong {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .legend-item {
@@ -432,6 +456,38 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.monthly-breakdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.monthly-breakdown th,
+.monthly-breakdown td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: right;
+}
+
+.monthly-breakdown th {
+  text-align: left;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+}
+
+.monthly-breakdown tbody tr:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.monthly-breakdown td:first-child,
+.monthly-breakdown th:first-child {
+  text-align: left;
+}
+
+.monthly-breakdown tfoot td {
+  border-top: 1px solid rgba(255,255,255,0.1);
 }
 
 .recommendation-section {
@@ -699,11 +755,13 @@
 .forecast-chart-container {
   background: rgba(5, 18, 11, 0.35);
   border-radius: 18px;
-  padding: 16px 12px;
+  padding: 20px 16px;
   border: 1px solid rgba(140, 195, 66, 0.15);
   overflow-x: auto;
+  overflow-y: visible;
   display: flex;
   justify-content: center;
+  min-height: 300px;
 }
 
 .forecast-insights {
@@ -799,6 +857,12 @@
 .pill--error {
   background: rgba(255, 109, 124, 0.2);
   color: #ffcbd3;
+}
+
+.pill--ongoing {
+  background: rgba(37, 99, 235, 0.12);
+  color: #cfe0ff;
+  border: 1px solid rgba(37, 99, 235, 0.18);
 }
 
 .table-scroller {
