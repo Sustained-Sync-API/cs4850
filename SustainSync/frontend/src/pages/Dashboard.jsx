@@ -195,7 +195,6 @@ function QuarterlyBreakdownTable({ monthlySeries = [], forecastData = null }) {
   if (!rows.hasBreakdown) {
     return (
       <div className="monthly-breakdown">
-        <div className="empty-state">Per-utility breakdown is unavailable for the selected quarters. Showing totals only.</div>
         <table>
           <thead>
             <tr>
@@ -922,17 +921,14 @@ function Dashboard() {
                     </div>
                   )
                 })}
-                <div className="consumption-row consumption-total">
-                  <strong>Total</strong>
-                  <strong>{number.format(totals.consumption || 0)} units</strong>
-                </div>
+
               </div>
             )}
           </div>
           <span className="metric-subtitle">Across all utility types for the past 10 years</span>
         </div>
         <div className="metric-card">
-          <span className="metric-label">Average Bill</span>
+          <span className="metric-label">Average Quarterly Cost</span>
           <div className="metric-value">
             {loading.monthly ? (
               'Loading…'
