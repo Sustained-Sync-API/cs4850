@@ -26,6 +26,7 @@ services:
     environment:
       - OLLAMA_HOST=ollama
       - OLLAMA_PORT=11434
+      - ENABLE_LLM_SUMMARIES=true
     depends_on:
       - db
     ports:
@@ -47,6 +48,13 @@ services:
     volumes:
       # Persist models at /var/lib/ollama/models inside the container
       - ollama_data:/var/lib/ollama/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:11434/v1/models || exit 1"]
       interval: 10s

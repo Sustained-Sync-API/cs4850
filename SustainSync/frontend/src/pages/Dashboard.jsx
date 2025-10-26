@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import '../App.css'
+import GoalsManager from '../components/GoalsManager'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -659,9 +660,12 @@ function Dashboard() {
   const [monthlySeries, setMonthlySeries] = useState([])
   const [forecastData, setForecastData] = useState(null)
   const [recommendations, setRecommendations] = useState('')
+  const [recommendationSources, setRecommendationSources] = useState(null)
+  const [goals, setGoals] = useState([])
   const [recommendationWarning, setRecommendationWarning] = useState('')
   const [uploadResult, setUploadResult] = useState(null)
   const [activeUtilityTab, setActiveUtilityTab] = useState('overview')
+  const [showGoalsManager, setShowGoalsManager] = useState(false)
   const [loading, setLoading] = useAsyncState({
     metrics: true,
     monthly: true,
@@ -714,12 +718,25 @@ function Dashboard() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || data.warning || 'Unable to load recommendations')
       setRecommendations(data.recommendations || '')
+      setRecommendationSources(data.sources || null)
       if (data.warning) setRecommendationWarning(data.warning)
     } catch (error) {
       setRecommendations('')
+      setRecommendationSources(null)
       setRecommendationWarning(error.message)
     } finally {
       setLoading({ recommendations: false })
+    }
+  }
+
+  const fetchGoals = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/goals/`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to load goals')
+      setGoals(data.goals || [])
+    } catch (error) {
+      setGoals([])
     }
   }
 
@@ -728,6 +745,7 @@ function Dashboard() {
     fetchMonthly()
     fetchForecast()
     fetchRecommendations()
+    fetchGoals()
   }, [])
 
   const actualForecastSeries = useMemo(() => {
@@ -802,16 +820,28 @@ function Dashboard() {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Upload failed')
+      
+      // Show success briefly
       setUploadResult({ ...data, filename: file.name })
 
-      if (!data.errors?.length) {
-        setLoading({ metrics: true, monthly: true, forecast: true })
-        fetchMetrics()
-        fetchMonthly()
+      // Always refresh data after upload (even if there were some errors)
+      setLoading({ metrics: true, monthly: true, forecast: true })
+      await Promise.all([
+        fetchMetrics(),
+        fetchMonthly(),
         fetchForecast()
-      }
+      ])
+
+      // Clear upload result after 2 seconds
+      setTimeout(() => {
+        setUploadResult(null)
+      }, 2000)
     } catch (error) {
       setUploadResult({ status: 'error', error: error.message, filename: file.name })
+      // Clear error after 3 seconds
+      setTimeout(() => {
+        setUploadResult(null)
+      }, 3000)
     } finally {
       event.target.value = ''
     }
@@ -883,9 +913,9 @@ function Dashboard() {
           <p>Track branded sustainability metrics, forecast costs, and surface AI guidance in one cohesive hub.</p>
         </div>
         <div className="header-actions">
-          <a className="ghost" href="#data-entry">
+          {/* <a className="ghost" href="#data-entry">
             Open Data Entry Workspace
-          </a>
+          </a> */}
           <button className="primary" onClick={() => window.open(`${API_BASE}/api/bills/template/`, '_blank')}>
             Download CSV Template
           </button>
@@ -928,7 +958,7 @@ function Dashboard() {
           <span className="metric-subtitle">Across all utility types for the past 10 years</span>
         </div>
         <div className="metric-card">
-          <span className="metric-label">Average Quarterly Cost</span>
+          <span className="metric-label">Average Monthly Cost per Quarter</span>
           <div className="metric-value">
             {loading.monthly ? (
               'Loading…'
@@ -1105,17 +1135,92 @@ function Dashboard() {
         {forecastData?.warning && <div className="warning-banner">{forecastData.warning}</div>}
       </section>
 
+      {goals.length > 0 && (
+        <section className="panel">
+          <div className="panel-header">
+            <div className="panel-header-row">
+              <div>
+                <h2>Your Sustainability Goals</h2>
+                <p>Active goals you've set to track and improve sustainability performance.</p>
+              </div>
+              <button 
+                className="btn-goals" 
+                onClick={() => setShowGoalsManager(true)}
+                title="Manage sustainability goals"
+              >
+                ✏️ Edit Goals
+              </button>
+            </div>
+          </div>
+          <div className="goals-display">
+            {goals.map((goal) => (
+              <div key={goal.id} className="goal-card">
+                <div className="goal-header">
+                  <h3>{goal.title}</h3>
+                  {goal.target_date && (
+                    <span className="goal-deadline">
+                      📅 {new Date(goal.target_date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </span>
+                  )}
+                </div>
+                <p className="goal-description">{goal.description}</p>
+                <div className="goal-meta">
+                  <span className="goal-created">Created {new Date(goal.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="layout-grid">
         <div className="panel">
           <div className="panel-header">
-            <h2>AI Sustainability Recommendations</h2>
-            <p>Generated from the contextual RAG pipeline using live database records.</p>
+            <div className="panel-header-row">
+              <div>
+                <h2>AI Sustainability Recommendations</h2>
+                <p>Generated from contextual RAG pipeline using live database records.</p>
+              </div>
+              {goals.length === 0 && (
+                <button 
+                  className="btn-goals" 
+                  onClick={() => setShowGoalsManager(true)}
+                  title="Set sustainability goals"
+                >
+                  🎯 Set Goals
+                </button>
+              )}
+            </div>
           </div>
+          
+          {recommendationSources && (
+            <div className="recommendation-sources">
+              <div className="source-badge">
+                <strong>AI Model:</strong> {recommendationSources.model}
+              </div>
+              {recommendationSources.data_range?.start_date && (
+                <div className="source-badge">
+                  <strong>Data Analyzed:</strong> {new Date(recommendationSources.data_range.start_date).toLocaleDateString()} - {new Date(recommendationSources.data_range.end_date).toLocaleDateString()} ({recommendationSources.data_range.total_bills} bills)
+                </div>
+              )}
+              <div className="source-badge">
+                <strong>Goals Analyzed:</strong> {goals.length}
+              </div>
+              <div className="source-badge">
+                <strong>RAG Pipeline:</strong> {recommendationSources.rag_enabled ? '✓ Enabled' : '✗ Disabled'}
+              </div>
+            </div>
+          )}
+          
           {recommendationWarning && <div className="warning-banner">{recommendationWarning}</div>}
           {loading.recommendations ? <p>Loading recommendations…</p> : <BulletList text={recommendations} enhanced={true} />}
         </div>
 
-        <div className="panel">
+        {/* <div className="panel">
           <div className="panel-header">
             <h2>Upload Status &amp; Validation</h2>
             <p>Track the latest CSV ingestion with detailed validation feedback.</p>
@@ -1160,9 +1265,9 @@ function Dashboard() {
               )}
             </div>
           )}
-        </div>
+        </div> */}
       </section>
-
+{/* 
       <section className="panel">
         <div className="panel-header">
           <h2>Cost Breakdown by Utility</h2>
@@ -1190,13 +1295,21 @@ function Dashboard() {
             <p className="empty-state">Upload billing data to unlock the utility breakdown.</p>
           )}
         </div>
-      </section>
+      </section> */}
 
       <footer className="app-footer">
         <small>
           SustainSync keeps analytics, Prophet forecasting, and AI insights unified in one workspace. Upload fresh utility data anytime to refresh all panels instantly.
         </small>
       </footer>
+      
+      {showGoalsManager && (
+        <GoalsManager onClose={() => {
+          setShowGoalsManager(false)
+          fetchRecommendations() // Refresh recommendations after goals change
+          fetchGoals() // Refresh goals display
+        }} />
+      )}
     </div>
   )
 }

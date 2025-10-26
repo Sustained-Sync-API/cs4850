@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/forecast/', views.forecast, name='forecast_api'),
     path('forecast/', views.forecast, name='forecast'),
     path('api/recommendations/', views.ai_recommendations, name='ai_recommendations'),
+    path('api/goals/', views.sustainability_goals, name='sustainability_goals'),
     path('api/bills/template/', views.download_template, name='download_template'),
     path('api/bills/upload/', views.upload_bills, name='upload_bills'),
     path('api/count/', views.count_bills, name='count_bills'),

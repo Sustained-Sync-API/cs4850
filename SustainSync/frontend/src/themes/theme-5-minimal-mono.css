@@ -1,0 +1,232 @@
+/* Theme 5: Minimal Monochrome - Ultra-clean black/white/gray design */
+
+:root {
+  --brand-primary: #18181b;
+  --brand-secondary: #3f3f46;
+  --brand-accent: #71717a;
+  --brand-dark: #09090b;
+  --brand-text: #18181b;
+  --brand-bg: #ffffff;
+  --brand-surface: #fafafa;
+}
+
+.app-shell {
+  background: #ffffff;
+}
+
+.top-nav {
+  background: #fafafa;
+  border-bottom: 1px solid #e4e4e7;
+  box-shadow: none;
+}
+
+.brand-name {
+  color: var(--brand-primary);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.brand-tagline {
+  color: #71717a;
+  font-weight: 500;
+}
+
+.nav-link {
+  color: #71717a;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+.nav-link:hover {
+  background: #f4f4f5;
+  color: var(--brand-primary);
+}
+
+.nav-link--active {
+  background: var(--brand-primary);
+  color: white;
+  box-shadow: none;
+}
+
+.page-shell {
+  color: var(--brand-text);
+}
+
+.page-header h1 {
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.page-header p {
+  color: #71717a;
+  font-weight: 400;
+}
+
+.primary {
+  background: var(--brand-primary);
+  color: white;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.primary:hover:not(:disabled) {
+  background: #09090b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.ghost {
+  border: 2px solid #e4e4e7;
+  background: white;
+  color: var(--brand-primary);
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.ghost:hover {
+  background: #fafafa;
+  border-color: #d4d4d8;
+}
+
+.metric-card {
+  background: white;
+  border: 1px solid #e4e4e7;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+}
+
+.metric-label {
+  color: #71717a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.metric-value {
+  color: var(--brand-primary);
+  font-weight: 800;
+}
+
+.metric-subtitle {
+  color: #a1a1aa;
+  font-weight: 500;
+}
+
+.panel {
+  background: white;
+  border: 1px solid #e4e4e7;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 16px;
+}
+
+.panel-header h2 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.panel-header p {
+  color: #71717a;
+  font-weight: 500;
+}
+
+.chart-grid {
+  stroke: #f4f4f5;
+  stroke-width: 1;
+}
+
+.chart-axis {
+  stroke: #d4d4d8;
+  stroke-width: 2;
+}
+
+.chart-tick,
+.chart-label {
+  fill: #71717a;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.chart-line {
+  stroke: var(--brand-primary);
+  stroke-width: 3;
+}
+
+.chart-line--forecast {
+  stroke: #71717a;
+  stroke-width: 2;
+  stroke-dasharray: 8 4;
+}
+
+.recommendation-heading {
+  background: #fafafa;
+  border-left: 4px solid var(--brand-primary);
+  border-radius: 8px;
+}
+
+.recommendation-heading h4 {
+  color: var(--brand-primary);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.recommendation-item {
+  background: white;
+  border: 1px solid #e4e4e7;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.recommendation-item:hover {
+  border-color: var(--brand-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateX(4px);
+}
+
+.recommendation-icon {
+  background: var(--brand-primary);
+  color: white;
+  box-shadow: none;
+  font-weight: 700;
+}
+
+.recommendation-text {
+  color: #3f3f46;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.recommendations li {
+  background: #fafafa;
+  border-left: 3px solid var(--brand-primary);
+  color: #3f3f46;
+  font-weight: 500;
+}
+
+.recommendations li::before {
+  color: var(--brand-primary);
+}
+
+.recommendations li:hover {
+  background: #f4f4f5;
+}
+
+.tab-button {
+  font-weight: 600;
+  color: #71717a;
+}
+
+.tab-button--active {
+  color: var(--brand-primary);
+}
+
+.tab-button--active::after {
+  background: var(--brand-primary);
+  height: 2px;
+}
+
+.status-pill--success {
+  background: #f4f4f5;
+  color: var(--brand-primary);
+  border: 1px solid #e4e4e7;
+}

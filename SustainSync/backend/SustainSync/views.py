@@ -15,7 +15,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import Bill
+from .models import Bill, SustainabilityGoal
 
 
 def _to_float(value):
@@ -160,8 +160,11 @@ def forecast(request):
     except ValueError:
         periods = 12
     
-    # Allow optional LLM summaries via query param (warning: very slow, ~2-3 minutes)
-    include_summaries = request.GET.get('summaries', '').lower() in ('true', '1', 'yes')
+    # Enable LLM summaries by default for AI-driven insights (can be disabled with summaries=false)
+    # Summaries may take 30-60 seconds depending on Ollama performance
+    import os
+    default_summaries = os.environ.get('ENABLE_LLM_SUMMARIES', 'true').lower() in ('true', '1', 'yes')
+    include_summaries = request.GET.get('summaries', str(default_summaries)).lower() in ('true', '1', 'yes')
 
     try:
         from llm import rag as ragmod
@@ -181,19 +184,178 @@ def forecast(request):
 @require_http_methods(["GET"])
 def ai_recommendations(request):
     custom_question = request.GET.get('question', '').strip()
+    
+    # Get all sustainability goals (auto-analyze all of them)
+    goals = SustainabilityGoal.objects.all()[:5]
+    goals_context = ""
+    if goals.exists():
+        goals_list = []
+        for g in goals:
+            goal_str = f"- {g.title}: {g.description}"
+            if g.target_date:
+                goal_str += f" (Target: {g.target_date.strftime('%B %Y')})"
+            goals_list.append(goal_str)
+        goals_context = "\n\nUser's Sustainability Goals:\n" + "\n".join(goals_list) + "\n"
+    
     prompt = custom_question or (
         "You are an energy and sustainability analyst reviewing multi-utility billing data. "
-        "Provide three actionable recommendations that combine cost savings and sustainability improvements. "
-        "Respond with concise bullet points."
+        f"{goals_context}"
+        "Analyze the data and provide 3-5 actionable recommendations that combine cost savings and sustainability improvements. "
+        "REQUIREMENTS:\n"
+        "1. For EACH recommendation, cite specific data points with exact numbers (e.g., 'Power consumption increased 15.2% from Q3 to Q4, from 12,450 kWh to 14,343 kWh').\n"
+        "2. Map each recommendation to the most relevant sustainability goal (by title) and explain how it advances that goal.\n"
+        "3. Quantify potential impact where possible (e.g., 'Could reduce monthly cost by ~$120' or 'Estimated 8% carbon reduction').\n"
+        "4. Identify seasonal patterns, anomalies, or efficiency opportunities in the data.\n"
+        "5. Assess current progress toward each user goal based on the billing trends.\n\n"
+        "Format each recommendation as:\n"
+        "**[Recommendation Title]**\n"
+        "- Data Evidence: [specific metrics and trends]\n"
+        "- Goal Alignment: [which goal this supports and why]\n"
+        "- Expected Impact: [quantified benefit]\n"
+        "- Action Steps: [2-3 concrete steps]"
     )
 
     try:
         from llm import rag as ragmod
         answer = ragmod.run_query(prompt)
-        return JsonResponse({'recommendations': answer})
+        
+        # Extract data sources from the RAG context
+        # The answer already includes citations from the LLM
+        data_sources = {
+            'model': 'llama3.2:1b',
+            'data_range': _get_data_range(),
+            'goals_count': goals.count(),
+            'rag_enabled': True
+        }
+        
+        return JsonResponse({
+            'recommendations': answer,
+            'sources': data_sources,
+            'goals_count': goals.count()
+        })
     except Exception as exc:  # pragma: no cover - optional dependency
         fallback = _fallback_recommendations()
-        return JsonResponse({'recommendations': fallback, 'warning': str(exc)})
+        data_sources = {
+            'model': 'fallback',
+            'data_range': _get_data_range(),
+            'goals_count': goals.count(),
+            'rag_enabled': False
+        }
+        return JsonResponse({
+            'recommendations': fallback,
+            'sources': data_sources,
+            'goals_count': goals.count(),
+            'warning': str(exc)
+        })
+
+
+def _get_data_range():
+    """Get the date range of available billing data."""
+    first_bill = Bill.objects.order_by('bill_date').first()
+    last_bill = Bill.objects.order_by('-bill_date').first()
+    
+    if first_bill and last_bill:
+        return {
+            'start_date': first_bill.bill_date.isoformat() if first_bill.bill_date else None,
+            'end_date': last_bill.bill_date.isoformat() if last_bill.bill_date else None,
+            'total_bills': Bill.objects.count()
+        }
+    return {'start_date': None, 'end_date': None, 'total_bills': 0}
+
+
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
+@csrf_exempt
+def sustainability_goals(request):
+    """CRUD endpoint for sustainability goals."""
+    
+    if request.method == "GET":
+        # List all goals or get specific goal
+        goal_id = request.GET.get('id')
+        if goal_id:
+            try:
+                goal = SustainabilityGoal.objects.get(id=goal_id)
+                return JsonResponse(_serialize_goal(goal))
+            except SustainabilityGoal.DoesNotExist:
+                return JsonResponse({'error': 'Goal not found'}, status=404)
+        
+        # List all goals
+        goals = SustainabilityGoal.objects.all()
+        goals_list = [_serialize_goal(g) for g in goals]
+        
+        print(f"[DEBUG] Goals endpoint called - found {goals.count()} goals")
+        print(f"[DEBUG] Goals data: {goals_list}")
+        
+        return JsonResponse({
+            'goals': goals_list,
+            'count': goals.count()
+        })
+    
+    elif request.method == "POST":
+        # Create new goal
+        try:
+            data = json.loads(request.body)
+            
+            # Limit to 5 goals maximum
+            if SustainabilityGoal.objects.count() >= 5:
+                return JsonResponse({'error': 'Maximum of 5 goals allowed'}, status=400)
+            
+            goal = SustainabilityGoal.objects.create(
+                title=data.get('title', ''),
+                description=data.get('description', ''),
+                target_date=parse_date(data['target_date']) if data.get('target_date') else None
+            )
+            return JsonResponse(_serialize_goal(goal), status=201)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+    
+    elif request.method == "PUT":
+        # Update existing goal
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get('id')
+            if not goal_id:
+                return JsonResponse({'error': 'Goal ID required'}, status=400)
+            
+            goal = SustainabilityGoal.objects.get(id=goal_id)
+            goal.title = data.get('title', goal.title)
+            goal.description = data.get('description', goal.description)
+            if data.get('target_date'):
+                goal.target_date = parse_date(data['target_date'])
+            goal.save()
+            
+            return JsonResponse(_serialize_goal(goal))
+        except SustainabilityGoal.DoesNotExist:
+            return JsonResponse({'error': 'Goal not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+    
+    elif request.method == "DELETE":
+        # Delete goal
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get('id')
+            if not goal_id:
+                return JsonResponse({'error': 'Goal ID required'}, status=400)
+            
+            goal = SustainabilityGoal.objects.get(id=goal_id)
+            goal.delete()
+            return JsonResponse({'success': True, 'message': 'Goal deleted'})
+        except SustainabilityGoal.DoesNotExist:
+            return JsonResponse({'error': 'Goal not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+
+def _serialize_goal(goal):
+    """Serialize a SustainabilityGoal instance to dict."""
+    return {
+        'id': goal.id,
+        'title': goal.title,
+        'description': goal.description,
+        'target_date': goal.target_date.isoformat() if goal.target_date else None,
+        'created_at': goal.created_at.isoformat(),
+        'updated_at': goal.updated_at.isoformat()
+    }
 
 
 @require_http_methods(["GET"])
@@ -311,6 +473,21 @@ def upload_bills(request):
             consumption = _parse_decimal(row.get('consumption'), 'consumption')
             cost = _parse_decimal(row.get('cost'), 'cost')
 
+            # Check for existing bill with same month/year and bill_type
+            # If found, delete it so the new one can take its place
+            if bill_date:
+                year = bill_date.year
+                month = bill_date.month
+                # Delete any existing bills for this month/year/type combination
+                deleted_count = Bill.objects.filter(
+                    bill_date__year=year,
+                    bill_date__month=month,
+                    bill_type=bill_type
+                ).exclude(bill_id=bill_id).delete()[0]
+                
+                if deleted_count > 0:
+                    updated += deleted_count
+
             defaults = {
                 'bill_type': bill_type,
                 'bill_date': bill_date,
@@ -333,7 +510,8 @@ def upload_bills(request):
 
             if created:
                 inserted += 1
-            else:
+            elif deleted_count == 0:
+                # Only count as updated if we didn't already count deleted records
                 updated += 1
         except Exception as exc:
             errors.append({'row': idx, 'message': str(exc)})

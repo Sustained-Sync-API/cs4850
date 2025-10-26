@@ -1,0 +1,365 @@
+/* Theme 3: Warm Sunset - Orange/coral gradient theme */
+
+:root {
+  --brand-primary: #f97316;
+  --brand-secondary: #fb923c;
+  --brand-accent: #fdba74;
+  --brand-dark: #c2410c;
+  --brand-text: #292524;
+  --brand-bg: #fff7ed;
+  --brand-surface: #fffbeb;
+}
+
+.app-shell {
+  background: linear-gradient(135deg, #fff7ed 0%, #fed7aa 50%, #ffedd5 100%);
+}
+
+.top-nav {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(254, 243, 199, 0.9));
+  backdrop-filter: blur(20px);
+  border-bottom: 2px solid var(--brand-secondary);
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.15);
+}
+
+.brand-name {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand-tagline {
+  color: #78716c;
+}
+
+.nav-link {
+  color: #78716c;
+}
+
+.nav-link:hover {
+  background: rgba(249, 115, 22, 0.1);
+  color: var(--brand-primary);
+}
+
+.nav-link--active {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  color: white;
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
+}
+
+.page-shell {
+  color: var(--brand-text);
+}
+
+.page-header p {
+  color: #78716c;
+}
+
+.primary {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  color: white;
+  box-shadow: 0 12px 32px rgba(249, 115, 22, 0.35);
+}
+
+.primary:hover:not(:disabled) {
+  box-shadow: 0 16px 40px rgba(249, 115, 22, 0.45);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.ghost {
+  border: 2px solid var(--brand-accent);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--brand-primary);
+}
+
+.ghost:hover {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: var(--brand-primary);
+}
+
+.metric-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(254, 243, 199, 0.6));
+  border: 2px solid rgba(249, 115, 22, 0.2);
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.12);
+}
+
+.metric-label {
+  color: #78716c;
+  font-weight: 700;
+}
+
+.metric-value {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.metric-subtitle {
+  color: #a8a29e;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  border: 2px solid rgba(249, 115, 22, 0.2);
+  box-shadow: 0 12px 40px rgba(249, 115, 22, 0.15);
+}
+
+.panel-header p {
+  color: #78716c;
+}
+
+.chart-grid {
+  stroke: rgba(249, 115, 22, 0.1);
+}
+
+.chart-axis {
+  stroke: rgba(249, 115, 22, 0.3);
+}
+
+.chart-tick,
+.chart-label {
+  fill: #78716c;
+}
+
+.chart-line {
+  stroke: var(--brand-primary);
+  stroke-width: 4;
+}
+
+.chart-line--forecast {
+  stroke: var(--brand-secondary);
+}
+
+.recommendation-heading {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(251, 146, 60, 0.08));
+  border-left: 5px solid var(--brand-primary);
+}
+
+.recommendation-heading h4 {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.recommendation-item {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(254, 243, 199, 0.5));
+  border: 2px solid rgba(249, 115, 22, 0.2);
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.1);
+}
+
+.recommendation-item:hover {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(254, 243, 199, 0.7));
+  border-color: var(--brand-primary);
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.2);
+  transform: translateX(8px) scale(1.02);
+}
+
+.recommendation-icon {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  color: white;
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.4);
+}
+
+.recommendation-text {
+  color: #292524;
+  font-weight: 500;
+}
+
+/* Override all white text to dark */
+body,
+.page-shell,
+.page-shell *,
+.panel *,
+.metric-card *,
+.forecast-insights *,
+.breakdown-card *,
+.tab-content *,
+.monthly-breakdown *,
+.upload-summary *,
+.forecast-card * {
+  color: #292524 !important;
+}
+
+.metric-value {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+.chart-tick,
+.chart-label {
+  fill: #78716c !important;
+}
+
+.panel-header h2,
+.panel-header h3 {
+  color: #292524 !important;
+}
+
+.forecast-insights h3 {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+/* Tables */
+.monthly-breakdown th,
+.monthly-breakdown td,
+.data-table th,
+.data-table td {
+  color: #292524 !important;
+  border-color: rgba(249, 115, 22, 0.2) !important;
+}
+
+.monthly-breakdown tbody tr:last-child td {
+  background-color: rgba(254, 243, 199, 0.5) !important;
+}
+
+.data-table thead {
+  background: rgba(249, 115, 22, 0.1) !important;
+}
+
+/* Chart elements */
+.multi-line--total .multi-line__actual {
+  stroke: var(--brand-primary) !important;
+}
+
+.multi-line--power .multi-line__actual {
+  stroke: #fb923c !important;
+}
+
+.multi-line--gas .multi-line__actual {
+  stroke: #fdba74 !important;
+}
+
+.multi-line--water .multi-line__actual {
+  stroke: #c2410c !important;
+}
+
+.legend-swatch--total {
+  background: var(--brand-primary) !important;
+}
+
+.legend-swatch--power {
+  background: #fb923c !important;
+}
+
+.legend-swatch--gas {
+  background: #fdba74 !important;
+}
+
+.legend-swatch--water {
+  background: #c2410c !important;
+}
+
+.chart-forecast-area {
+  fill: rgba(249, 115, 22, 0.1) !important;
+}
+
+/* Breakdown cards */
+.breakdown-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(249, 115, 22, 0.2) !important;
+}
+
+.breakdown-card h3 {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+.breakdown-card span {
+  color: #292524 !important;
+}
+
+.progress {
+  background: rgba(249, 115, 22, 0.2) !important;
+}
+
+.progress-bar {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)) !important;
+}
+
+/* Forecast and Insights */
+.chart-line {
+  stroke: var(--brand-primary) !important;
+}
+
+.chart-line--forecast {
+  stroke: #fb923c !important;
+}
+
+.forecast-chart-container {
+  background: rgba(255, 247, 237, 0.6) !important;
+  border-color: rgba(249, 115, 22, 0.2) !important;
+}
+
+.forecast-insights {
+  background: linear-gradient(160deg, rgba(254, 243, 199, 0.5), rgba(253, 230, 138, 0.6)) !important;
+  border-color: rgba(249, 115, 22, 0.3) !important;
+  box-shadow: inset 0 1px 2px rgba(249, 115, 22, 0.15) !important;
+}
+
+.forecast-insights h3 {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+  border-bottom-color: rgba(249, 115, 22, 0.25) !important;
+}
+
+.utility-header {
+  border-bottom-color: rgba(249, 115, 22, 0.25) !important;
+}
+
+.utility-header h3 {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+/* Recommendations */
+.recommendations {
+  color: #292524 !important;
+}
+
+.recommendation-heading {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(251, 146, 60, 0.15)) !important;
+  border-left-color: var(--brand-primary) !important;
+}
+
+.recommendation-heading h4 {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-dark)) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+.recommendation-item {
+  background: linear-gradient(145deg, rgba(249, 115, 22, 0.08), rgba(251, 146, 60, 0.1)) !important;
+  border-color: rgba(249, 115, 22, 0.2) !important;
+}
+
+.recommendation-icon {
+  color: var(--brand-primary) !important;
+  background: rgba(249, 115, 22, 0.15) !important;
+}
+
+.recommendation-text {
+  color: #292524 !important;
+}
+
+.recommendations li::before {
+  color: var(--brand-primary) !important;
+}
+
+.recommendations li:hover {
+  background: rgba(249, 115, 22, 0.06) !important;
+}

@@ -1,0 +1,158 @@
+/* Theme 2: Dark Purple - Premium dark theme with purple accents */
+
+:root {
+  --brand-primary: #a855f7;
+  --brand-secondary: #c084fc;
+  --brand-accent: #d8b4fe;
+  --brand-dark: #581c87;
+  --brand-text: #f3e8ff;
+  --brand-bg: #18181b;
+  --brand-surface: #27272a;
+}
+
+.app-shell {
+  background: linear-gradient(135deg, #0f0a1f 0%, #1a0f2e 50%, #0f0a1f 100%);
+}
+
+.top-nav {
+  background: rgba(39, 39, 42, 0.95);
+  backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.brand-name {
+  color: var(--brand-accent);
+  text-shadow: 0 0 24px rgba(168, 85, 247, 0.6);
+}
+
+.brand-tagline {
+  color: rgba(243, 232, 255, 0.7);
+}
+
+.nav-link {
+  color: rgba(243, 232, 255, 0.7);
+}
+
+.nav-link:hover {
+  background: rgba(168, 85, 247, 0.15);
+  color: var(--brand-accent);
+}
+
+.nav-link--active {
+  background: rgba(168, 85, 247, 0.25);
+  color: white;
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.4);
+}
+
+.page-shell {
+  color: var(--brand-text);
+}
+
+.page-header p {
+  color: rgba(243, 232, 255, 0.6);
+}
+
+.primary {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  color: white;
+  box-shadow: 0 8px 32px rgba(168, 85, 247, 0.5);
+}
+
+.primary:hover:not(:disabled) {
+  box-shadow: 0 12px 40px rgba(168, 85, 247, 0.6);
+  transform: translateY(-3px);
+}
+
+.ghost {
+  border: 2px solid rgba(168, 85, 247, 0.4);
+  background: rgba(39, 39, 42, 0.5);
+  color: var(--brand-accent);
+}
+
+.ghost:hover {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: var(--brand-primary);
+}
+
+.metric-card {
+  background: linear-gradient(145deg, rgba(88, 28, 135, 0.2), rgba(39, 39, 42, 0.8));
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.metric-label {
+  color: rgba(216, 180, 254, 0.7);
+}
+
+.metric-value {
+  color: var(--brand-accent);
+  text-shadow: 0 0 16px rgba(168, 85, 247, 0.4);
+}
+
+.metric-subtitle {
+  color: rgba(243, 232, 255, 0.5);
+}
+
+.panel {
+  background: rgba(39, 39, 42, 0.85);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+.panel-header p {
+  color: rgba(243, 232, 255, 0.6);
+}
+
+.chart-grid {
+  stroke: rgba(168, 85, 247, 0.1);
+}
+
+.chart-axis {
+  stroke: rgba(168, 85, 247, 0.3);
+}
+
+.chart-tick,
+.chart-label {
+  fill: rgba(243, 232, 255, 0.7);
+}
+
+.chart-line {
+  stroke: var(--brand-primary);
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.6));
+}
+
+.chart-line--forecast {
+  stroke: var(--brand-secondary);
+}
+
+.recommendation-heading {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(192, 132, 252, 0.1));
+  border-left: 4px solid var(--brand-primary);
+}
+
+.recommendation-heading h4 {
+  color: var(--brand-accent);
+}
+
+.recommendation-item {
+  background: linear-gradient(145deg, rgba(88, 28, 135, 0.15), rgba(39, 39, 42, 0.6));
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.recommendation-item:hover {
+  background: linear-gradient(145deg, rgba(88, 28, 135, 0.25), rgba(39, 39, 42, 0.7));
+  border-color: var(--brand-primary);
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.4);
+}
+
+.recommendation-icon {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  color: white;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.5);
+}
+
+.recommendation-text {
+  color: rgba(243, 232, 255, 0.9);
+}
