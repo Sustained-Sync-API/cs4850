@@ -1,8 +1,19 @@
+/* Modern Blue Theme - CSS Variables */
+:root {
+  --brand-primary: #2563eb;
+  --brand-secondary: #3b82f6;
+  --brand-accent: #60a5fa;
+  --brand-dark: #1e3a8a;
+  --brand-text: #1f2937;
+  --brand-bg: #f8fafc;
+  --brand-surface: #ffffff;
+}
+
 .app-shell {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, rgba(14, 51, 33, 0.92), rgba(45, 71, 62, 0.85));
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
 }
 
 .top-nav {
@@ -10,10 +21,10 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px clamp(24px, 4vw, 64px);
-  background: rgba(10, 10, 12, 0.92);
+  background: var(--brand-surface);
   backdrop-filter: blur(24px) saturate(180%);
-  border-bottom: 1px solid rgba(140, 195, 66, 0.12);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  border-bottom: 2px solid var(--brand-primary);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -49,16 +60,12 @@
   font-size: 1.15rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--brand-snow);
-  background: linear-gradient(135deg, var(--brand-lime), var(--brand-moss));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--brand-primary);
 }
 
 .brand-tagline {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: #6b7280;
   font-weight: 500;
   letter-spacing: 0.05em;
 }
@@ -73,7 +80,7 @@
 }
 
 .nav-link {
-  color: rgba(255, 255, 255, 0.65);
+  color: #6b7280;
   font-weight: 600;
   font-size: 0.9rem;
   padding: 10px 20px;
@@ -87,14 +94,15 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, var(--brand-lime), var(--brand-moss));
+  background: rgba(37, 99, 235, 0.1);
   opacity: 0;
   transition: opacity 0.25s ease;
   border-radius: 12px;
 }
 
 .nav-link:hover {
-  color: var(--brand-snow);
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--brand-primary);
   transform: translateY(-1px);
 }
 
@@ -103,10 +111,10 @@
 }
 
 .nav-link--active {
-  background: linear-gradient(135deg, rgba(140, 195, 66, 0.18), rgba(106, 142, 78, 0.22));
-  color: var(--brand-lime);
-  box-shadow: 0 4px 16px rgba(140, 195, 66, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(140, 195, 66, 0.3);
+  background: var(--brand-primary);
+  color: white;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3);
+  border: 1px solid rgba(37, 99, 235, 0.5);
 }
 
 .nav-link--active::before {
@@ -122,7 +130,7 @@
   display: flex;
   flex-direction: column;
   gap: 32px;
-  color: var(--brand-snow);
+  color: var(--brand-text);
 }
 
 .page-header {
@@ -1534,3 +1542,321 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+/* ============================================
+   MODERN BLUE THEME OVERRIDES
+   ============================================ */
+
+/* Override text colors for modern blue theme */
+body,
+.page-shell,
+.page-shell *,
+.panel *,
+.metric-card *,
+.forecast-insights *,
+.breakdown-card *,
+.tab-content *,
+.monthly-breakdown *,
+.upload-summary *,
+.page-header p,
+.metric-label,
+.metric-subtitle,
+.chart-tick,
+.chart-label,
+.recommendation-text,
+.goal-description,
+.goal-created {
+  color: #1f2937 !important;
+}
+
+/* Primary accents */
+.metric-value,
+.brand-name,
+.recommendation-heading h4,
+.tab-button--active,
+.utility-header h3,
+.goal-header h3 {
+  color: var(--brand-primary) !important;
+}
+
+/* Buttons and Primary Actions */
+.primary {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)) !important;
+  color: white !important;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3) !important;
+}
+
+.primary:hover:not(:disabled) {
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.4) !important;
+}
+
+.ghost {
+  border: 2px solid var(--brand-accent) !important;
+  background: white !important;
+  color: var(--brand-primary) !important;
+}
+
+.ghost:hover {
+  background: rgba(37, 99, 235, 0.05) !important;
+}
+
+.btn-goals {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)) !important;
+  border-color: rgba(37, 99, 235, 0.3) !important;
+  color: white !important;
+}
+
+.btn-goals:hover {
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35) !important;
+}
+
+/* Cards and Panels */
+.metric-card,
+.panel,
+.breakdown-card,
+.goal-card {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+}
+
+.goal-card {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+.goal-card:hover {
+  border-color: var(--brand-accent) !important;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.15) !important;
+}
+
+/* Charts */
+.chart-grid {
+  stroke: #e5e7eb !important;
+}
+
+.chart-axis {
+  stroke: #9ca3af !important;
+}
+
+.chart-tick,
+.chart-label {
+  fill: #6b7280 !important;
+}
+
+.chart-line {
+  stroke: var(--brand-primary) !important;
+}
+
+.chart-line--forecast {
+  stroke: var(--brand-accent) !important;
+}
+
+.chart-forecast-area {
+  fill: rgba(37, 99, 235, 0.1) !important;
+}
+
+/* Multi-line charts */
+.multi-line--total .multi-line__actual,
+.multi-line--total .multi-line__forecast {
+  stroke: var(--brand-primary) !important;
+}
+
+.multi-line--power .multi-line__actual {
+  stroke: #3b82f6 !important;
+}
+
+.multi-line--gas .multi-line__actual {
+  stroke: #60a5fa !important;
+}
+
+.multi-line--water .multi-line__actual {
+  stroke: #2563eb !important;
+}
+
+.legend-swatch--total {
+  background: var(--brand-primary) !important;
+}
+
+.legend-swatch--power {
+  background: #3b82f6 !important;
+}
+
+.legend-swatch--gas {
+  background: #60a5fa !important;
+}
+
+.legend-swatch--water {
+  background: #2563eb !important;
+}
+
+.legend-swatch--actual {
+  background: var(--brand-primary) !important;
+}
+
+.legend-swatch--forecast {
+  background: var(--brand-accent) !important;
+}
+
+/* Recommendations and Insights */
+.recommendation-heading {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(59, 130, 246, 0.12)) !important;
+  border-left: 4px solid var(--brand-primary) !important;
+}
+
+.recommendation-item {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+.recommendation-item:hover {
+  border-color: var(--brand-accent) !important;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.1) !important;
+}
+
+.recommendation-icon {
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: var(--brand-primary) !important;
+}
+
+.recommendations li::before {
+  color: var(--brand-primary) !important;
+}
+
+.recommendations li:hover {
+  background: rgba(37, 99, 235, 0.05) !important;
+}
+
+/* Forecast containers */
+.forecast-chart-container {
+  background: rgba(239, 246, 255, 0.5) !important;
+  border-color: rgba(37, 99, 235, 0.15) !important;
+}
+
+.forecast-insights {
+  background: linear-gradient(160deg, rgba(219, 234, 254, 0.8), rgba(191, 219, 254, 0.9)) !important;
+  border-color: rgba(37, 99, 235, 0.25) !important;
+  box-shadow: inset 0 1px 2px rgba(37, 99, 235, 0.1) !important;
+}
+
+.forecast-insights h3 {
+  color: var(--brand-primary) !important;
+  border-bottom-color: rgba(37, 99, 235, 0.2) !important;
+}
+
+/* Tables */
+.monthly-breakdown th,
+.monthly-breakdown td,
+.data-table th,
+.data-table td {
+  color: #1f2937 !important;
+  border-color: #e5e7eb !important;
+}
+
+.monthly-breakdown tbody tr:last-child td,
+.monthly-breakdown tfoot td {
+  background-color: #f9fafb !important;
+  color: #1f2937 !important;
+}
+
+/* Progress bars */
+.progress {
+  background: #e5e7eb !important;
+}
+
+.progress-bar {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)) !important;
+}
+
+/* Status pills */
+.status-pill--uploading,
+.pill--ongoing {
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: var(--brand-primary) !important;
+  border-color: rgba(37, 99, 235, 0.2) !important;
+}
+
+/* Goals specific */
+.goal-deadline {
+  background: rgba(37, 99, 235, 0.15) !important;
+  border: 1px solid rgba(37, 99, 235, 0.3) !important;
+  color: var(--brand-primary) !important;
+}
+
+/* Source badges */
+.source-badge {
+  background: rgba(37, 99, 235, 0.08) !important;
+  border: 1px solid rgba(37, 99, 235, 0.2) !important;
+  color: #1f2937 !important;
+}
+
+.source-badge strong {
+  color: var(--brand-primary) !important;
+}
+
+/* Goals Manager Modal */
+.goals-manager-overlay {
+  background: rgba(0, 0, 0, 0.75) !important;
+}
+
+.goals-manager {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.98), rgba(249, 250, 251, 1)) !important;
+  border: 1px solid rgba(37, 99, 235, 0.2) !important;
+  box-shadow: 0 24px 64px rgba(37, 99, 235, 0.3) !important;
+}
+
+.goals-manager h2 {
+  color: var(--brand-primary) !important;
+}
+
+.goal-form input,
+.goal-form textarea {
+  background: white !important;
+  border-color: #e5e7eb !important;
+  color: #1f2937 !important;
+}
+
+.goal-form input:focus,
+.goal-form textarea:focus {
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}
+
+.goal-form label {
+  color: #374151 !important;
+}
+
+/* Tabs */
+.tab-button {
+  color: #6b7280 !important;
+  border-color: transparent !important;
+}
+
+.tab-button--active {
+  color: var(--brand-primary) !important;
+  background: rgba(37, 99, 235, 0.1) !important;
+  border-color: var(--brand-primary) !important;
+}
+
+.tab-button:hover {
+  background: rgba(37, 99, 235, 0.05) !important;
+  color: var(--brand-primary) !important;
+}
+
+/* Utility header */
+.utility-header {
+  border-bottom-color: rgba(37, 99, 235, 0.2) !important;
+}
+
+/* Warning and error banners */
+.warning-banner {
+  background: rgba(251, 191, 36, 0.1) !important;
+  border-color: rgba(251, 191, 36, 0.3) !important;
+  color: #92400e !important;
+}
+
+.error-banner {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+  color: #991b1b !important;
+}

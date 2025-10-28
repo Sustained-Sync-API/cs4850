@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import brandLogo from './assets/brand-logo.png'
 import Dashboard from './pages/Dashboard.jsx'
 import DataEntry from './pages/DataEntry.jsx'
-import ThemeSwitcher from './components/ThemeSwitcher.jsx'
 import './App.css'
 
 const DEFAULT_ROUTE = 'dashboard'
@@ -43,7 +42,6 @@ function App() {
 
   return (
     <div className="app-shell">
-      <ThemeSwitcher />
       <nav className="top-nav">
         <div className="brand">
           <img src={brandLogo} alt="SustainSync logo" />
