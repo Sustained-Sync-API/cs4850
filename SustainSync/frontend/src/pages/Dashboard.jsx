@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import '../App.css'
-import GoalsManager from '../components/GoalsManager'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -655,22 +654,14 @@ function TabPanel({ tabs = [], activeTab, onTabChange }) {
   )
 }
 
-function Dashboard() {
+function Dashboard({ forecastData, recommendations, recommendationSources, recommendationWarning, loading: sharedLoading, onDataRefresh }) {
   const [metrics, setMetrics] = useState(null)
   const [monthlySeries, setMonthlySeries] = useState([])
-  const [forecastData, setForecastData] = useState(null)
-  const [recommendations, setRecommendations] = useState('')
-  const [recommendationSources, setRecommendationSources] = useState(null)
-  const [goals, setGoals] = useState([])
-  const [recommendationWarning, setRecommendationWarning] = useState('')
   const [uploadResult, setUploadResult] = useState(null)
   const [activeUtilityTab, setActiveUtilityTab] = useState('overview')
-  const [showGoalsManager, setShowGoalsManager] = useState(false)
   const [loading, setLoading] = useAsyncState({
     metrics: true,
     monthly: true,
-    forecast: true,
-    recommendations: true,
   })
 
   const fetchMetrics = async () => {
@@ -699,53 +690,9 @@ function Dashboard() {
     }
   }
 
-  const fetchForecast = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/forecast/?periods=12`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to load forecast')
-      setForecastData(data)
-    } catch (error) {
-      setForecastData({ error: error.message })
-    } finally {
-      setLoading({ forecast: false })
-    }
-  }
-
-  const fetchRecommendations = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/recommendations/`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || data.warning || 'Unable to load recommendations')
-      setRecommendations(data.recommendations || '')
-      setRecommendationSources(data.sources || null)
-      if (data.warning) setRecommendationWarning(data.warning)
-    } catch (error) {
-      setRecommendations('')
-      setRecommendationSources(null)
-      setRecommendationWarning(error.message)
-    } finally {
-      setLoading({ recommendations: false })
-    }
-  }
-
-  const fetchGoals = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/goals/`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to load goals')
-      setGoals(data.goals || [])
-    } catch (error) {
-      setGoals([])
-    }
-  }
-
   useEffect(() => {
     fetchMetrics()
     fetchMonthly()
-    fetchForecast()
-    fetchRecommendations()
-    fetchGoals()
   }, [])
 
   const actualForecastSeries = useMemo(() => {
@@ -825,12 +772,14 @@ function Dashboard() {
       setUploadResult({ ...data, filename: file.name })
 
       // Always refresh data after upload (even if there were some errors)
-      setLoading({ metrics: true, monthly: true, forecast: true })
+      setLoading({ metrics: true, monthly: true })
       await Promise.all([
         fetchMetrics(),
         fetchMonthly(),
-        fetchForecast()
       ])
+      
+      // Refresh shared data
+      if (onDataRefresh) onDataRefresh()
 
       // Clear upload result after 2 seconds
       setTimeout(() => {
@@ -1135,91 +1084,7 @@ function Dashboard() {
         {forecastData?.warning && <div className="warning-banner">{forecastData.warning}</div>}
       </section>
 
-      {goals.length > 0 && (
-        <section className="panel">
-          <div className="panel-header">
-            <div className="panel-header-row">
-              <div>
-                <h2>Your Sustainability Goals</h2>
-                <p>Active goals you've set to track and improve sustainability performance.</p>
-              </div>
-              <button 
-                className="btn-goals" 
-                onClick={() => setShowGoalsManager(true)}
-                title="Manage sustainability goals"
-              >
-                ✏️ Edit Goals
-              </button>
-            </div>
-          </div>
-          <div className="goals-display">
-            {goals.map((goal) => (
-              <div key={goal.id} className="goal-card">
-                <div className="goal-header">
-                  <h3>{goal.title}</h3>
-                  {goal.target_date && (
-                    <span className="goal-deadline">
-                      📅 {new Date(goal.target_date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </span>
-                  )}
-                </div>
-                <p className="goal-description">{goal.description}</p>
-                <div className="goal-meta">
-                  <span className="goal-created">Created {new Date(goal.created_at).toLocaleDateString()}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section className="layout-grid">
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-header-row">
-              <div>
-                <h2>AI Sustainability Recommendations</h2>
-                <p>Generated from contextual RAG pipeline using live database records.</p>
-              </div>
-              {goals.length === 0 && (
-                <button 
-                  className="btn-goals" 
-                  onClick={() => setShowGoalsManager(true)}
-                  title="Set sustainability goals"
-                >
-                  🎯 Set Goals
-                </button>
-              )}
-            </div>
-          </div>
-          
-          {recommendationSources && (
-            <div className="recommendation-sources">
-              <div className="source-badge">
-                <strong>AI Model:</strong> {recommendationSources.model}
-              </div>
-              {recommendationSources.data_range?.start_date && (
-                <div className="source-badge">
-                  <strong>Data Analyzed:</strong> {new Date(recommendationSources.data_range.start_date).toLocaleDateString()} - {new Date(recommendationSources.data_range.end_date).toLocaleDateString()} ({recommendationSources.data_range.total_bills} bills)
-                </div>
-              )}
-              <div className="source-badge">
-                <strong>Goals Analyzed:</strong> {goals.length}
-              </div>
-              <div className="source-badge">
-                <strong>RAG Pipeline:</strong> {recommendationSources.rag_enabled ? '✓ Enabled' : '✗ Disabled'}
-              </div>
-            </div>
-          )}
-          
-          {recommendationWarning && <div className="warning-banner">{recommendationWarning}</div>}
-          {loading.recommendations ? <p>Loading recommendations…</p> : <BulletList text={recommendations} enhanced={true} />}
-        </div>
-
         {/* <div className="panel">
           <div className="panel-header">
             <h2>Upload Status &amp; Validation</h2>
@@ -1302,14 +1167,6 @@ function Dashboard() {
           SustainSync keeps analytics, Prophet forecasting, and AI insights unified in one workspace. Upload fresh utility data anytime to refresh all panels instantly.
         </small>
       </footer>
-      
-      {showGoalsManager && (
-        <GoalsManager onClose={() => {
-          setShowGoalsManager(false)
-          fetchRecommendations() // Refresh recommendations after goals change
-          fetchGoals() // Refresh goals display
-        }} />
-      )}
     </div>
   )
 }
