@@ -15,7 +15,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import Bill
+from .models import Bill, Goal
 
 
 def _to_float(value):
@@ -251,6 +251,144 @@ def _parse_date(value: str | None, field_name: str):
     return parsed
 
 
+@require_http_methods(["GET"])
+def list_bills(request):
+    """List and filter bills with pagination."""
+    try:
+        # Get filter parameters
+        bill_type = request.GET.get('bill_type')
+        page = int(request.GET.get('page', '1'))
+        page_size = int(request.GET.get('page_size', '20'))
+        
+        # Validate pagination
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+        
+        # Build query
+        queryset = Bill.objects.all()
+        if bill_type:
+            queryset = queryset.filter(bill_type=bill_type)
+        
+        # Get total count
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size  # Ceiling division
+        
+        # Paginate
+        start = (page - 1) * page_size
+        end = start + page_size
+        bills = queryset[start:end]
+        
+        # Serialize
+        results = [
+            {
+                'bill_id': bill.bill_id,
+                'bill_type': bill.bill_type,
+                'bill_date': bill.bill_date.isoformat() if bill.bill_date else None,
+                'service_start': bill.service_start.isoformat() if bill.service_start else None,
+                'service_end': bill.service_end.isoformat() if bill.service_end else None,
+                'service_period': f"{bill.service_start.isoformat() if bill.service_start else ''} - {bill.service_end.isoformat() if bill.service_end else ''}",
+                'units_of_measure': bill.units_of_measure,
+                'consumption': _to_float(bill.consumption),
+                'cost': _to_float(bill.cost),
+                'provider': bill.provider,
+                'city': bill.city,
+                'state': bill.state,
+                'zip': bill.zip,
+                'timestamp_upload': bill.timestamp_upload.isoformat() if bill.timestamp_upload else None,
+            }
+            for bill in bills
+        ]
+        
+        return JsonResponse({
+            'results': results,
+            'count': total_count,
+            'total_pages': total_pages,
+            'page': page,
+            'page_size': page_size,
+        })
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH"])
+def update_bill(request, bill_id):
+    """Update a single bill."""
+    try:
+        bill = Bill.objects.get(bill_id=bill_id)
+    except Bill.DoesNotExist:
+        return JsonResponse({'error': 'Bill not found'}, status=404)
+    
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+    
+    allowed_types = {choice[0] for choice in Bill.BILL_TYPE_CHOICES}
+    allowed_units = {choice[0] for choice in Bill.UNITS_OF_MEASURE_CHOICES}
+    
+    try:
+        # Update fields if present in payload
+        if 'bill_type' in payload:
+            bill_type = payload['bill_type'].strip()
+            if bill_type not in allowed_types:
+                raise ValueError(f"bill_type must be one of: {', '.join(sorted(allowed_types))}")
+            bill.bill_type = bill_type
+        
+        if 'bill_date' in payload:
+            bill.bill_date = _parse_date(payload['bill_date'], 'bill_date')
+        
+        if 'service_start' in payload:
+            bill.service_start = _parse_date(payload['service_start'], 'service_start')
+        
+        if 'service_end' in payload:
+            bill.service_end = _parse_date(payload['service_end'], 'service_end')
+        
+        if 'units_of_measure' in payload:
+            units = payload['units_of_measure'].strip() if payload['units_of_measure'] else None
+            if units and units not in allowed_units:
+                raise ValueError(f"units_of_measure must be one of: {', '.join(sorted(allowed_units))}")
+            bill.units_of_measure = units
+        
+        if 'consumption' in payload:
+            bill.consumption = _parse_decimal(str(payload['consumption']), 'consumption')
+        
+        if 'cost' in payload:
+            bill.cost = _parse_decimal(str(payload['cost']), 'cost')
+        
+        if 'provider' in payload:
+            bill.provider = payload['provider'] or None
+        
+        if 'city' in payload:
+            bill.city = payload['city'] or None
+        
+        if 'state' in payload:
+            state = payload['state']
+            bill.state = state.upper() if state else None
+        
+        if 'zip' in payload:
+            bill.zip = payload['zip'] or None
+        
+        bill.save()
+        
+        return JsonResponse({
+            'bill_id': bill.bill_id,
+            'bill_type': bill.bill_type,
+            'bill_date': bill.bill_date.isoformat() if bill.bill_date else None,
+            'service_start': bill.service_start.isoformat() if bill.service_start else None,
+            'service_end': bill.service_end.isoformat() if bill.service_end else None,
+            'units_of_measure': bill.units_of_measure,
+            'consumption': _to_float(bill.consumption),
+            'cost': _to_float(bill.cost),
+            'provider': bill.provider,
+            'city': bill.city,
+            'state': bill.state,
+            'zip': bill.zip,
+        })
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def upload_bills(request):
@@ -340,3 +478,122 @@ def upload_bills(request):
         response['status'] = 'success'
 
     return JsonResponse(response)
+
+
+@require_http_methods(["GET"])
+def list_goals(request):
+    """List all sustainability goals."""
+    try:
+        goals = Goal.objects.all()
+        results = [
+            {
+                'id': goal.id,
+                'title': goal.title,
+                'description': goal.description,
+                'target_date': goal.target_date.isoformat() if goal.target_date else None,
+                'created_at': goal.created_at.isoformat() if goal.created_at else None,
+                'updated_at': goal.updated_at.isoformat() if goal.updated_at else None,
+            }
+            for goal in goals
+        ]
+        return JsonResponse({'results': results})
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_goal(request):
+    """Create a new sustainability goal."""
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+    
+    title = payload.get('title', '').strip()
+    description = payload.get('description', '').strip()
+    
+    if not title:
+        return JsonResponse({'error': 'Title is required'}, status=400)
+    if not description:
+        return JsonResponse({'error': 'Description is required'}, status=400)
+    
+    # Check goal limit (max 5)
+    if Goal.objects.count() >= 5:
+        return JsonResponse({'error': 'Maximum of 5 goals allowed'}, status=400)
+    
+    try:
+        target_date = _parse_date(payload.get('target_date'), 'target_date')
+        
+        goal = Goal.objects.create(
+            title=title,
+            description=description,
+            target_date=target_date,
+        )
+        
+        return JsonResponse({
+            'id': goal.id,
+            'title': goal.title,
+            'description': goal.description,
+            'target_date': goal.target_date.isoformat() if goal.target_date else None,
+            'created_at': goal.created_at.isoformat() if goal.created_at else None,
+        }, status=201)
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH"])
+def update_goal(request, goal_id):
+    """Update an existing goal."""
+    try:
+        goal = Goal.objects.get(id=goal_id)
+    except Goal.DoesNotExist:
+        return JsonResponse({'error': 'Goal not found'}, status=404)
+    
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+    
+    try:
+        if 'title' in payload:
+            title = payload['title'].strip()
+            if not title:
+                raise ValueError('Title cannot be empty')
+            goal.title = title
+        
+        if 'description' in payload:
+            description = payload['description'].strip()
+            if not description:
+                raise ValueError('Description cannot be empty')
+            goal.description = description
+        
+        if 'target_date' in payload:
+            goal.target_date = _parse_date(payload['target_date'], 'target_date')
+        
+        goal.save()
+        
+        return JsonResponse({
+            'id': goal.id,
+            'title': goal.title,
+            'description': goal.description,
+            'target_date': goal.target_date.isoformat() if goal.target_date else None,
+            'updated_at': goal.updated_at.isoformat() if goal.updated_at else None,
+        })
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_goal(request, goal_id):
+    """Delete a goal."""
+    try:
+        goal = Goal.objects.get(id=goal_id)
+        goal.delete()
+        return JsonResponse({'success': True})
+    except Goal.DoesNotExist:
+        return JsonResponse({'error': 'Goal not found'}, status=404)
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=500)

@@ -12,14 +12,22 @@ from SustainSync.models import Bill
 # Resolve CSV path: prefer environment, then common filenames in the container-mounted /app/data
 CSV_PATH = os.environ.get('BILLS_CSV')
 if not CSV_PATH:
-    candidates = ['data/bills.csv', 'data/billdata.csv', 'data/bills.csv']
+    candidates = [
+        '/app/data/billdata.csv',  # Mounted volume in Docker
+        '/app/data/bills.csv',
+        'data/billdata.csv',        # Relative path fallback
+        'data/bills.csv',
+        'backend/data/bills.csv'    # Backend subdirectory
+    ]
     for c in candidates:
         if os.path.exists(c):
             CSV_PATH = c
+            print(f"✅ Found CSV file at: {CSV_PATH}")
             break
     if not CSV_PATH:
-        # default fallback
-        CSV_PATH = 'data/billdata.csv'
+        # default fallback - will fail gracefully
+        CSV_PATH = '/app/data/billdata.csv'
+        print(f"⚠️  Using fallback path: {CSV_PATH}")
 
 
 def parse_optional_float(value):

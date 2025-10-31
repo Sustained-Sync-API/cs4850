@@ -69,3 +69,20 @@ class Bill(models.Model):
 	def __str__(self):
 		return f"{self.bill_type} bill {self.bill_id} ({self.bill_date})"
 
+
+# Model representing a sustainability goal
+class Goal(models.Model):
+	title = models.CharField(max_length=200)
+	description = models.TextField()
+	target_date = models.DateField(null=True, blank=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		verbose_name = "Goal"
+		verbose_name_plural = "Goals"
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return self.title
+
