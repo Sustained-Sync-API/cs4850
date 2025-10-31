@@ -115,6 +115,9 @@ function Tables() {
   const [saving, setSaving] = useState(false)
   const [sortConfig, setSortConfig] = useState({ key: 'bill_date', direction: 'desc' })
 
+  const sortKey = sortConfig?.key ?? 'bill_date'
+  const sortDirection = sortConfig?.direction ?? 'desc'
+
   const collator = useMemo(() => new Intl.Collator('en', { sensitivity: 'base', numeric: false }), [])
 
   useEffect(() => {
@@ -125,7 +128,7 @@ function Tables() {
     setEditingId(null)
     setFormState({})
     setSaveError('')
-  }, [utility, page, pageSize])
+  }, [utility, page, pageSize, sortKey, sortDirection])
 
   const loadBills = useCallback(async () => {
     setLoading(true)
@@ -137,6 +140,12 @@ function Tables() {
         page: String(page),
         page_size: String(pageSize),
       })
+      if (sortKey) {
+        params.set('sort_by', sortKey)
+      }
+      if (sortDirection) {
+        params.set('sort_direction', sortDirection)
+      }
       const response = await fetch(`${API_BASE}/api/bills/?${params.toString()}`)
       const data = await response.json()
       if (!response.ok) {
@@ -157,7 +166,7 @@ function Tables() {
     } finally {
       setLoading(false)
     }
-  }, [utility, page, pageSize])
+  }, [utility, page, pageSize, sortKey, sortDirection])
 
   useEffect(() => {
     loadBills()
@@ -336,6 +345,7 @@ function Tables() {
         direction: column.defaultDirection ?? 'asc',
       }
     })
+    setPage(1)
   }
 
   const recordsStart = rows.length > 0 ? (page - 1) * pageSize + 1 : 0

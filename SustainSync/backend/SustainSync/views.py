@@ -7,8 +7,9 @@ import json
 from decimal import Decimal, InvalidOperation
 from io import TextIOWrapper
 
-from django.db.models import Avg, Sum
-from django.db.models.functions import TruncMonth
+from django.db.models import Avg, Sum, F
+from django.db.models.expressions import OrderBy
+from django.db.models.functions import TruncMonth, Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -431,6 +432,31 @@ def list_bills(request):
         bill_type = request.GET.get('bill_type')
         page = int(request.GET.get('page', '1'))
         page_size = int(request.GET.get('page_size', '20'))
+        sort_by = request.GET.get('sort_by', 'bill_date')
+        sort_direction = request.GET.get('sort_direction', 'desc').lower()
+
+        descending = sort_direction != 'asc'
+
+        ordering_map = {
+            'bill_date': [F('bill_date')],
+            'timestamp_upload': [F('timestamp_upload')],
+            'consumption': [F('consumption')],
+            'cost': [F('cost')],
+            'provider': [F('provider'), F('bill_date')],
+            'service_period': [
+                Coalesce(F('service_start'), F('service_end'), F('bill_date')),
+                Coalesce(F('service_end'), F('service_start'), F('bill_date')),
+            ],
+            'location': [F('city'), F('state'), F('zip'), F('bill_date')],
+        }
+
+        ordering_expressions = ordering_map.get(sort_by, ordering_map['bill_date'])
+        order_by = [
+            OrderBy(expr, descending=descending, nulls_last=True)
+            for expr in ordering_expressions
+        ]
+        # Always add bill_id as a deterministic tie-breaker.
+        order_by.append(OrderBy(F('bill_id'), descending=descending))
 
         # clamp pagination values
         page = max(1, page)
@@ -440,8 +466,12 @@ def list_bills(request):
         if bill_type:
             queryset = queryset.filter(bill_type=bill_type)
 
+        queryset = queryset.order_by(*order_by)
+
         total_count = queryset.count()
         total_pages = (total_count + page_size - 1) // page_size
+        if total_pages > 0 and page > total_pages:
+            page = total_pages
 
         start = (page - 1) * page_size
         end = start + page_size
@@ -476,6 +506,8 @@ def list_bills(request):
             'total_pages': total_pages,
             'page': page,
             'page_size': page_size,
+            'sort_by': sort_by,
+            'sort_direction': 'asc' if not descending else 'desc',
         })
     except Exception as exc:
         return JsonResponse({'error': str(exc)}, status=500)
