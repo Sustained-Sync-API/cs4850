@@ -46,7 +46,12 @@ function GoalsManager({ onClose }) {
       const response = await fetch(`${API_BASE}/api/goals/`)
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to load goals')
-      setGoals(data.results || [])
+      const normalizedGoals = Array.isArray(data.results)
+        ? data.results
+        : Array.isArray(data.goals)
+          ? data.goals
+          : []
+      setGoals(normalizedGoals)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -78,8 +83,10 @@ function GoalsManager({ onClose }) {
     if (!confirm('Are you sure you want to delete this goal?')) return
     
     try {
-      const response = await fetch(`${API_BASE}/api/goals/${goalId}/delete/`, {
+      const response = await fetch(`${API_BASE}/api/goals/`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: goalId }),
       })
       if (!response.ok) {
         const data = await response.json()
@@ -104,22 +111,15 @@ function GoalsManager({ onClose }) {
     }
 
     try {
-      let response
-      if (editingGoal) {
-        // Update existing goal
-        response = await fetch(`${API_BASE}/api/goals/${editingGoal.id}/`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        })
-      } else {
-        // Create new goal
-        response = await fetch(`${API_BASE}/api/goals/create/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        })
-      }
+      const method = editingGoal ? 'PUT' : 'POST'
+      const payload = editingGoal
+        ? { ...formData, id: editingGoal.id }
+        : formData
+      const response = await fetch(`${API_BASE}/api/goals/`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
 
       if (!response.ok) {
         const data = await response.json()

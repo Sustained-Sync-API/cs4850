@@ -28,11 +28,8 @@ urlpatterns = [
     path('api/recommendations/', views.ai_recommendations, name='ai_recommendations'),
     path('api/bills/', views.list_bills, name='list_bills'),
     path('api/bills/<int:bill_id>/', views.update_bill, name='update_bill'),
+    path('api/goals/', views.sustainability_goals, name='sustainability_goals'),
     path('api/bills/template/', views.download_template, name='download_template'),
     path('api/bills/upload/', views.upload_bills, name='upload_bills'),
     path('api/count/', views.count_bills, name='count_bills'),
-    path('api/goals/', views.list_goals, name='list_goals'),
-    path('api/goals/create/', views.create_goal, name='create_goal'),
-    path('api/goals/<int:goal_id>/', views.update_goal, name='update_goal'),
-    path('api/goals/<int:goal_id>/delete/', views.delete_goal, name='delete_goal'),
 ]

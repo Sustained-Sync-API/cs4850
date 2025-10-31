@@ -65,3 +65,5 @@ fi
 
 # start development server
 python backend/manage.py runserver 0.0.0.0:8000
+
+#run as LF in windows instead of CRLF (Bottom right of VS code, click CRLF and change to LF)

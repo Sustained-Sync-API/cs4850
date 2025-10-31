@@ -267,16 +267,19 @@ def ask_llm(context, question):
     "You are reviewing multi-year billing and consumption data (2015–2024) across power, gas, and water utilities. "
     "Your goal is to provide **insightful, data-driven analysis** that helps the company improve both its **financial efficiency** "
     "and **environmental sustainability**.\n\n"
-    "When analyzing, consider key sustainability metrics such as:\n"
-    "- Year-over-year changes in total and per-unit consumption.\n"
-    "- Cost per unit of energy or water used.\n"
-    "- Seasonal or regional consumption patterns.\n"
-    "- Potential carbon reduction or energy efficiency improvements.\n"
-    "- How shifts in resource usage might align with sustainability goals or company policies.\n\n"
+    "CRITICAL ANALYSIS REQUIREMENTS:\n"
+    "- ALWAYS cite specific numbers from the data (exact costs, consumption values, dates, percent changes).\n"
+    "- Identify year-over-year trends with precise quantification (e.g., '12.3% increase from 2023 to 2024').\n"
+    "- Calculate and report cost per unit metrics (e.g., $/kWh, $/therm, $/gallon).\n"
+    "- Flag seasonal patterns, anomalies, or efficiency opportunities with supporting evidence.\n"
+    "- Estimate carbon reduction potential or energy efficiency gains where applicable.\n"
+    "- Provide actionable recommendations with quantified impact estimates.\n"
+    "- Align insights with company sustainability goals when provided.\n\n"
     "When you respond:\n"
-    "- Focus on trends, anomalies, and improvement opportunities.\n"
-    "- Quantify metrics when possible (e.g., percent increases, cost per unit).\n"
-    "- Provide actionable recommendations to improve efficiency or reduce environmental impact.\n\n"
+    "- Use exact figures, not approximations (e.g., say '$1,234.56' not 'about $1,200').\n"
+    "- Compare periods explicitly (e.g., 'Q4 2024 vs Q4 2023').\n"
+    "- Prioritize insights by financial impact and sustainability benefit.\n"
+    "- Suggest 2-3 concrete action steps for each key finding.\n\n"
     )
 
     # prompt = f"{preamble}Context:\n{context}\n\nQuestion:\n{question}\n\nAnswer with specific trends and comparisons."
@@ -292,16 +295,16 @@ def ask_llm(context, question):
 
     prompt = f"{preamble}{hint}\n\nContext:\n{context}\n\nQuestion:\n{question}\n\nAnswer with specific trends and comparisons."
 
-    # 1) Prefer HTTP call to Ollama's completions endpoint (stable across
-    # client versions). Use model id with explicit tag returned by the
-    # /v1/models endpoint (we expect "llama3.2:latest").
+    # 1) Prefer HTTP call to Ollama's native generate endpoint
+    # Ollama 0.12.6 uses /api/generate, not OpenAI-compatible /v1/completions
     try:
         OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'ollama')
         OLLAMA_PORT = os.environ.get('OLLAMA_PORT', '11434')
-        url = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/completions"
+        url = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/api/generate"
         payload = {
             'model': os.environ.get('OLLAMA_MODEL', 'llama3.2:latest'),
             'prompt': prompt,
+            'stream': False,
         }
 
         # Prepare a requests session with retry logic for transient errors
@@ -321,11 +324,11 @@ def ask_llm(context, question):
         if r.status_code == 200:
             try:
                 body = r.json()
-                # Ollama returns choices with 'text' for completions
-                if 'choices' in body and len(body['choices']) > 0:
-                    return body['choices'][0].get('text', '')
+                # Ollama native API returns 'response' field with generated text
+                if 'response' in body:
+                    return body['response']
                 # fallback: return full JSON as string
-                logger.warning("Ollama 200 response did not contain 'choices': %s", body)
+                logger.warning("Ollama 200 response did not contain 'response': %s", body)
                 return str(body)
             except Exception:
                 logger.exception("Failed to parse Ollama JSON response; returning raw text")
@@ -341,19 +344,16 @@ def ask_llm(context, question):
     _init_ollama_client_if_needed()
     if _OLLAMA_AVAILABLE and client is not None:
         try:
-            # Some client versions expose chat; others may use chat-like API.
-            res = None
-            try:
-                res = client.chat(model="llama3.2", messages=[{"role": "user", "content": prompt}])
-                return res['message']['content']
-            except Exception:
-                # Try a positional chat or other client shapes if available
-                try:
-                    res = client.chat("llama3.2", prompt)
-                    return res.get('message', {}).get('content', str(res))
-                except Exception:
-                    pass
+            # Use generate() method for Ollama native API
+            res = client.generate(
+                model="llama3.2",
+                prompt=prompt
+            )
+            if isinstance(res, dict) and 'response' in res:
+                return res['response']
+            return str(res)
         except Exception:
+            logger.exception("Python client generate() call failed")
             pass
 
     # Fallback when Ollama or the chat call is not available. Return a
@@ -409,7 +409,7 @@ def _forecast_from_series(ts, periods=12):
         {
             'date': row['bill_date'].date().isoformat(),
             'value': float(row['cost']),
-            'consumption': float(row['consumption'] or 0),
+            'usage': float(row['consumption'] or 0),
         }
         for _, row in ts.iterrows()
     ]
@@ -419,20 +419,32 @@ def _forecast_from_series(ts, periods=12):
     try:
         from prophet import Prophet
 
-        prophet_df = ts.rename(columns={'bill_date': 'ds', 'cost': 'y'})
-        model_t = Prophet(seasonality_mode='additive', yearly_seasonality=True)
-        model_t.fit(prophet_df)
-        future = model_t.make_future_dataframe(periods=periods, freq='M')
-        forecast = model_t.predict(future)
-        tail = forecast.tail(periods)
+        # Forecast cost
+        prophet_df_cost = ts.rename(columns={'bill_date': 'ds', 'cost': 'y'})
+        model_cost = Prophet(seasonality_mode='additive', yearly_seasonality=True)
+        model_cost.fit(prophet_df_cost)
+        future = model_cost.make_future_dataframe(periods=periods, freq='ME')
+        forecast_cost = model_cost.predict(future)
+        tail_cost = forecast_cost.tail(periods)
+        
+        # Forecast consumption/usage
+        prophet_df_usage = ts.rename(columns={'bill_date': 'ds', 'consumption': 'y'})
+        model_usage = Prophet(seasonality_mode='additive', yearly_seasonality=True)
+        model_usage.fit(prophet_df_usage)
+        forecast_usage = model_usage.predict(future)
+        tail_usage = forecast_usage.tail(periods)
+        
         prophet_forecast = [
             {
-                'date': row['ds'].date().isoformat(),
-                'yhat': float(row['yhat']),
-                'yhat_lower': float(row['yhat_lower']),
-                'yhat_upper': float(row['yhat_upper']),
+                'date': row_cost['ds'].date().isoformat(),
+                'yhat': float(row_cost['yhat']),
+                'yhat_lower': float(row_cost['yhat_lower']),
+                'yhat_upper': float(row_cost['yhat_upper']),
+                'yhat_usage': float(row_usage['yhat']),
+                'yhat_usage_lower': float(row_usage['yhat_lower']),
+                'yhat_usage_upper': float(row_usage['yhat_upper']),
             }
-            for _, row in tail.iterrows()
+            for (_, row_cost), (_, row_usage) in zip(tail_cost.iterrows(), tail_usage.iterrows())
         ]
     except Exception as exc:  # pragma: no cover - Prophet optional dependency
         prophet_error = str(exc)
@@ -447,19 +459,30 @@ def _forecast_from_series(ts, periods=12):
     # Fallback to a lightweight linear trend when Prophet is unavailable.
     ts = ts.reset_index(drop=True)
     ts['month_index'] = np.arange(len(ts))
-    coeffs = np.polyfit(ts['month_index'], ts['cost'], 1)
-    slope, intercept = coeffs
+    
+    # Forecast cost
+    coeffs_cost = np.polyfit(ts['month_index'], ts['cost'], 1)
+    slope_cost, intercept_cost = coeffs_cost
+    
+    # Forecast usage/consumption
+    coeffs_usage = np.polyfit(ts['month_index'], ts['consumption'].fillna(0), 1)
+    slope_usage, intercept_usage = coeffs_usage
+    
     future_index = np.arange(len(ts), len(ts) + periods)
     last_date = ts['bill_date'].max()
     future_dates = pd.date_range(last_date + pd.offsets.MonthEnd(1), periods=periods, freq='M')
     fallback_series = []
     for idx, date in zip(future_index, future_dates):
-        pred = slope * idx + intercept
+        pred_cost = slope_cost * idx + intercept_cost
+        pred_usage = slope_usage * idx + intercept_usage
         fallback_series.append({
             'date': date.date().isoformat(),
-            'yhat': float(pred),
-            'yhat_lower': float(pred),
-            'yhat_upper': float(pred),
+            'yhat': float(pred_cost),
+            'yhat_lower': float(pred_cost),
+            'yhat_upper': float(pred_cost),
+            'yhat_usage': float(pred_usage),
+            'yhat_usage_lower': float(pred_usage),
+            'yhat_usage_upper': float(pred_usage),
         })
 
     return {
@@ -544,8 +567,14 @@ def _summarize_usage_with_llm(label, context, fallback):
 
     label_name = 'Total portfolio' if label == 'total' else f"{label} usage"
     prompt = (
-        f"Review the {label_name} metrics and forecast. "
-        "Provide three concise bullet points with actionable ideas to reduce consumption and improve sustainability."
+        f"Analyze the {label_name} data and forecast provided in the context.\n\n"
+        "Provide 3-5 specific insights in this format:\n"
+        "1. **Key Trend**: [Describe the most significant pattern with exact numbers and percent changes]\n"
+        "2. **Cost Efficiency**: [Calculate and report cost per unit trends, identify optimization opportunities]\n"
+        "3. **Forecast Analysis**: [Interpret the forecast - expected changes, risks, seasonal factors]\n"
+        "4. **Actionable Recommendation**: [Specific action with estimated cost/carbon impact]\n"
+        "5. **Sustainability Note**: [Environmental impact or efficiency improvement opportunity]\n\n"
+        "MUST include: exact dollar amounts, consumption values, dates, and percent changes from the data."
     )
 
     if not context:

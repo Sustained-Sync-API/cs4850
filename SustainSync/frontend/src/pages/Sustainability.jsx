@@ -128,7 +128,12 @@ function Sustainability() {
       const response = await fetch(`${API_BASE}/api/goals/`)
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to load goals')
-      setGoals(data.results || [])
+      const normalizedGoals = Array.isArray(data.results)
+        ? data.results
+        : Array.isArray(data.goals)
+          ? data.goals
+          : []
+      setGoals(normalizedGoals)
     } catch (err) {
       console.error('Failed to fetch goals:', err)
       setGoals([])
