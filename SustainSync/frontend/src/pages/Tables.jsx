@@ -1,4 +1,40 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  IconButton,
+  InputLabel,
+  LinearProgress,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TableSortLabel,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+  Pagination,
+  Divider,
+} from '@mui/material'
+import { useTheme } from '@mui/material/styles'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { EditOutlined } from '@mui/icons-material'
 import '../App.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
@@ -8,13 +44,13 @@ const DEFAULT_PAGE_SIZE = 20
 const UNITS_OPTIONS = ['kWh', 'therms', 'CCF']
 
 const TABLE_COLUMNS = [
-  { key: 'bill_date', label: 'Bill Date', sortType: 'date', defaultDirection: 'desc' },
-  { key: 'service_period', label: 'Service Period', sortType: 'date', defaultDirection: 'desc' },
-  { key: 'consumption', label: 'Consumption', sortType: 'number', defaultDirection: 'desc' },
-  { key: 'cost', label: 'Cost', sortType: 'number', defaultDirection: 'desc' },
-  { key: 'provider', label: 'Provider', sortType: 'string', defaultDirection: 'asc' },
-  { key: 'location', label: 'Location', sortType: 'string', defaultDirection: 'asc' },
-  { key: 'timestamp_upload', label: 'Uploaded', sortType: 'date', defaultDirection: 'desc' },
+  { key: 'bill_date', label: 'Bill Date', sortType: 'date', minWidth: 140, defaultDirection: 'desc' },
+  { key: 'service_period', label: 'Service Period', sortType: 'date', minWidth: 200, defaultDirection: 'desc' },
+  { key: 'consumption', label: 'Consumption', sortType: 'number', minWidth: 150, defaultDirection: 'desc' },
+  { key: 'cost', label: 'Cost', sortType: 'number', minWidth: 120, defaultDirection: 'desc' },
+  { key: 'provider', label: 'Provider', sortType: 'string', minWidth: 180, defaultDirection: 'asc' },
+  { key: 'location', label: 'Location', sortType: 'string', minWidth: 200, defaultDirection: 'asc' },
+  { key: 'timestamp_upload', label: 'Uploaded', sortType: 'date', minWidth: 160, defaultDirection: 'desc' },
 ]
 
 const currency = new Intl.NumberFormat('en-US', {
@@ -26,11 +62,33 @@ const number = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 })
 
-const formatDate = (value) => {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+const parseDateValue = (value) => {
+  if (!value) return null
+  if (value instanceof Date) {
+    const time = value.getTime()
+    return Number.isNaN(time) ? null : time
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+  const trimmed = String(value).trim()
+  if (!trimmed) return null
+  const isoDateMatch = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+  const date = isoDateMatch ? new Date(`${trimmed}T00:00:00Z`) : new Date(trimmed)
+  const time = date.getTime()
+  return Number.isNaN(time) ? null : time
+}
+
+const formatMonthYear = (value) => {
+  const time = parseDateValue(value)
+  if (time === null) return '—'
+  return new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(new Date(time))
+}
+
+const formatFullDate = (value) => {
+  const time = parseDateValue(value)
+  if (time === null) return '—'
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(time))
 }
 
 const toInputValue = (value) => {
@@ -39,6 +97,9 @@ const toInputValue = (value) => {
 }
 
 function Tables() {
+  const theme = useTheme()
+  const isSmDown = useMediaQuery(theme.breakpoints.down('sm'))
+
   const [utility, setUtility] = useState(UTILITY_OPTIONS[0])
   const [rows, setRows] = useState([])
   const [totalCount, setTotalCount] = useState(0)
@@ -52,7 +113,7 @@ function Tables() {
   const [saveError, setSaveError] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
   const [saving, setSaving] = useState(false)
-  const [sortConfig, setSortConfig] = useState(null)
+  const [sortConfig, setSortConfig] = useState({ key: 'bill_date', direction: 'desc' })
 
   const collator = useMemo(() => new Intl.Collator('en', { sensitivity: 'base', numeric: false }), [])
 
@@ -113,10 +174,14 @@ function Tables() {
     )
   }, [rows])
 
+  const updateFormField = (name, value) => {
+    setFormState((prev) => ({ ...prev, [name]: value }))
+  }
+
   const startEdit = (row) => {
     setEditingId(row.bill_id)
     setFormState({
-      bill_type: row.bill_type,
+      bill_type: row.bill_type || utility,
       bill_date: row.bill_date || '',
       service_start: row.service_start || '',
       service_end: row.service_end || '',
@@ -127,6 +192,7 @@ function Tables() {
       state: row.state || '',
       zip: row.zip || '',
       units_of_measure: row.units_of_measure || '',
+      timestamp_upload: row.timestamp_upload || '',
     })
     setSaveError('')
     setStatusMessage('')
@@ -140,7 +206,7 @@ function Tables() {
 
   const handleFieldChange = (event) => {
     const { name, value } = event.target
-    setFormState((prev) => ({ ...prev, [name]: value }))
+    updateFormField(name, value)
   }
 
   const handleSave = async () => {
@@ -151,6 +217,9 @@ function Tables() {
 
     const payload = {}
     for (const [key, value] of Object.entries(formState)) {
+      if (key === 'timestamp_upload') {
+        continue
+      }
       if (value === '' || value === null) {
         payload[key] = ''
       } else if (key === 'state') {
@@ -183,24 +252,18 @@ function Tables() {
     }
   }
 
-  const getSortValue = (row, columnKey) => {
-    switch (columnKey) {
+  const getDateSortValue = (row, key) => {
+    switch (key) {
       case 'bill_date':
-        return row.bill_date
-      case 'service_period':
-        return row.service_start || row.service_end || row.bill_date
-      case 'consumption':
-        return row.consumption
-      case 'cost':
-        return row.cost
-      case 'provider':
-        return row.provider
-      case 'location':
-        return [row.city, row.state, row.zip].filter(Boolean).join(' ')
+        return parseDateValue(row.bill_date)
+      case 'service_period': {
+        const primary = parseDateValue(row.service_start) ?? parseDateValue(row.service_end)
+        return primary ?? parseDateValue(row.bill_date)
+      }
       case 'timestamp_upload':
-        return row.timestamp_upload
+        return parseDateValue(row.timestamp_upload)
       default:
-        return ''
+        return null
     }
   }
 
@@ -210,51 +273,59 @@ function Tables() {
     if (!column) return rows
     const direction = sortConfig.direction === 'asc' ? 1 : -1
 
-    const normaliseDate = (value) => {
-      if (!value) return null
-      const time = new Date(value).getTime()
-      return Number.isNaN(time) ? null : time
-    }
-
     return [...rows].sort((a, b) => {
-      const valueA = getSortValue(a, column.key)
-      const valueB = getSortValue(b, column.key)
-
       if (column.sortType === 'number') {
-        const numberA = Number(valueA)
-        const numberB = Number(valueB)
-        const hasNumberA = !Number.isNaN(numberA)
-        const hasNumberB = !Number.isNaN(numberB)
+        const numberA = Number(a[column.key])
+        const numberB = Number(b[column.key])
+        const hasNumberA = Number.isFinite(numberA)
+        const hasNumberB = Number.isFinite(numberB)
         if (!hasNumberA && !hasNumberB) return 0
-        const fallback = direction === 1 ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY
-        const resolvedA = hasNumberA ? numberA : fallback
-        const resolvedB = hasNumberB ? numberB : fallback
-        if (resolvedA === resolvedB) return 0
-        const comparison = resolvedA - resolvedB
-        return comparison === 0 ? 0 : comparison * direction
+        if (!hasNumberA) return 1
+        if (!hasNumberB) return -1
+        if (numberA === numberB) return 0
+        return (numberA - numberB) * direction
       }
 
       if (column.sortType === 'date') {
-        const timeA = normaliseDate(valueA)
-        const timeB = normaliseDate(valueB)
+        const timeA = getDateSortValue(a, column.key)
+        const timeB = getDateSortValue(b, column.key)
+
         if (timeA === null && timeB === null) return 0
         if (timeA === null) return 1
         if (timeB === null) return -1
+
+        if (timeA === timeB && column.key === 'service_period') {
+          const endA = parseDateValue(a.service_end)
+          const endB = parseDateValue(b.service_end)
+          if (endA !== endB) {
+            if (endA === null) return 1
+            if (endB === null) return -1
+            return (endA - endB) * direction
+          }
+        }
+
         if (timeA === timeB) return 0
-        const comparison = timeA - timeB
-        return comparison === 0 ? 0 : comparison * direction
+        return (timeA - timeB) * direction
       }
 
-      const textA = String(valueA ?? '').trim()
-      const textB = String(valueB ?? '').trim()
+      const textA = String(
+        column.key === 'location'
+          ? [a.city, a.state, a.zip].filter(Boolean).join(' ')
+          : a[column.key] ?? ''
+      ).trim()
+      const textB = String(
+        column.key === 'location'
+          ? [b.city, b.state, b.zip].filter(Boolean).join(' ')
+          : b[column.key] ?? ''
+      ).trim()
       const comparison = collator.compare(textA, textB)
-      if (comparison === 0) return 0
       return comparison * direction
     })
   }, [rows, sortConfig, collator])
 
   const handleSort = (columnKey) => {
     const column = TABLE_COLUMNS.find((entry) => entry.key === columnKey)
+    if (!column) return
     setSortConfig((current) => {
       if (current?.key === columnKey) {
         const nextDirection = current.direction === 'asc' ? 'desc' : 'asc'
@@ -262,283 +333,435 @@ function Tables() {
       }
       return {
         key: columnKey,
-        direction: column?.defaultDirection ?? 'asc',
+        direction: column.defaultDirection ?? 'asc',
       }
     })
-  }
-
-  const renderCell = (columnKey, row, isEditing) => {
-    switch (columnKey) {
-      case 'bill_date':
-        return isEditing ? (
-          <input type="date" name="bill_date" value={formState.bill_date ?? ''} onChange={handleFieldChange} />
-        ) : (
-          formatDate(row.bill_date)
-        )
-      case 'service_period':
-        return isEditing ? (
-          <div className="table-edit-group">
-            <input
-              type="date"
-              name="service_start"
-              value={formState.service_start ?? ''}
-              onChange={handleFieldChange}
-              aria-label="Service period start"
-            />
-            <span>→</span>
-            <input
-              type="date"
-              name="service_end"
-              value={formState.service_end ?? ''}
-              onChange={handleFieldChange}
-              aria-label="Service period end"
-            />
-          </div>
-        ) : row.service_start || row.service_end ? (
-          `${formatDate(row.service_start)} – ${formatDate(row.service_end)}`
-        ) : (
-          '—'
-        )
-      case 'consumption':
-        return isEditing ? (
-          <div className="table-edit-group">
-            <input
-              type="number"
-              name="consumption"
-              value={formState.consumption ?? ''}
-              onChange={handleFieldChange}
-              step="0.01"
-              min="0"
-            />
-            <select name="units_of_measure" value={formState.units_of_measure ?? ''} onChange={handleFieldChange}>
-              <option value="">Units</option>
-              {UNITS_OPTIONS.map((unit) => (
-                <option key={unit} value={unit}>
-                  {unit}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <>
-            {number.format(row.consumption ?? 0)}{' '}
-            {row.units_of_measure ? <span className="pill pill--ongoing">{row.units_of_measure}</span> : null}
-          </>
-        )
-      case 'cost':
-        return isEditing ? (
-          <input type="number" name="cost" value={formState.cost ?? ''} onChange={handleFieldChange} step="0.01" min="0" />
-        ) : (
-          currency.format(row.cost ?? 0)
-        )
-      case 'provider':
-        return isEditing ? (
-          <div className="table-edit-group">
-            <select name="bill_type" value={formState.bill_type ?? utility} onChange={handleFieldChange}>
-              {UTILITY_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <input type="text" name="provider" value={formState.provider ?? ''} onChange={handleFieldChange} placeholder="Provider" />
-          </div>
-        ) : (
-          row.provider || '—'
-        )
-      case 'location': {
-        if (isEditing) {
-          return (
-            <div className="table-edit-group">
-              <input type="text" name="city" value={formState.city ?? ''} onChange={handleFieldChange} placeholder="City" />
-              <input
-                type="text"
-                name="state"
-                value={formState.state ?? ''}
-                onChange={handleFieldChange}
-                placeholder="State"
-                maxLength={8}
-              />
-              <input type="text" name="zip" value={formState.zip ?? ''} onChange={handleFieldChange} placeholder="ZIP" />
-            </div>
-          )
-        }
-        const cityState =
-          row.city || row.state ? `${row.city ?? ''}${row.city && row.state ? ', ' : ''}${row.state ?? ''}`.trim() : ''
-        const locationParts = []
-        if (cityState) locationParts.push(cityState)
-        if (row.zip) locationParts.push(row.zip)
-        return locationParts.length > 0 ? locationParts.join(' ') : '—'
-      }
-      case 'timestamp_upload':
-        return row.timestamp_upload
-          ? new Date(row.timestamp_upload).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })
-          : '—'
-      default:
-        return '—'
-    }
   }
 
   const recordsStart = rows.length > 0 ? (page - 1) * pageSize + 1 : 0
   const recordsEnd = rows.length > 0 ? (page - 1) * pageSize + rows.length : 0
 
   return (
-    <div className="page-shell">
-      <header className="page-header">
-        <div>
-          <h1>Utility Tables</h1>
-          <p>Dive into historical billing records by utility. Switch between power, gas, and water to inspect costs and consumption.</p>
-        </div>
-        <div className="header-actions" style={{ gap: '12px' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          alignItems: { xs: 'flex-start', md: 'center' },
+          justifyContent: 'space-between',
+          gap: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h3" sx={{ color: 'text.primary' }}>
+            Utility Tables
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560 }}>
+            Explore detailed billing history by utility type. Switch between power, gas, and water records and drill
+            into costs, usage, upload dates, and providers in one place.
+          </Typography>
+        </Box>
+        <ToggleButtonGroup
+          exclusive
+          size={isSmDown ? 'small' : 'medium'}
+          value={utility}
+          onChange={(_, value) => {
+            if (value) setUtility(value)
+          }}
+          sx={{
+            backgroundColor: 'background.paper',
+            borderRadius: 2,
+            boxShadow: '0 4px 16px rgba(15, 23, 42, 0.12)',
+          }}
+        >
           {UTILITY_OPTIONS.map((option) => (
-            <button
+            <ToggleButton
               key={option}
-              type="button"
-              className={utility === option ? 'primary' : 'ghost'}
-              onClick={() => setUtility(option)}
+              value={option}
+              sx={{
+                px: 3,
+                fontWeight: 600,
+                '&.Mui-selected': {
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': {
+                    bgcolor: 'primary.dark',
+                  },
+                },
+              }}
             >
               {option}
-            </button>
+            </ToggleButton>
           ))}
-        </div>
-      </header>
+        </ToggleButtonGroup>
+      </Box>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-header-row" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '16px' }}>
-              <div>
-                <h2>{utility} Billing Records</h2>
-                <p>
-                  Showing {pageSize} records per page. Click any column header to sort and edit entries directly to keep your dataset focused and accurate.
-                </p>
-              </div>
-              <div className="table-summary" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'flex-end' }}>
-                <span className="pill">Total records: {totalCount.toLocaleString('en-US')}</span>
-                <span className="pill">Page: {page} / {totalPages}</span>
-                <span className="pill">Visible: {rows.length.toLocaleString('en-US')}</span>
-                <span className="pill">Cost: {currency.format(totals.cost)}</span>
-                <span className="pill">Consumption: {number.format(totals.consumption)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      <Paper elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', gap: 2 }}>
+              <Box>
+                <Typography variant="h4">{utility} Billing Records</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Showing {pageSize} records per page. Use the column headers to sort and click edit to update a bill in
+                  a focused dialog.
+                </Typography>
+              </Box>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Chip
+                  color="primary"
+                  variant="outlined"
+                  label={`Total: ${totalCount.toLocaleString('en-US')}`}
+                  sx={{ bgcolor: 'primary.light', borderColor: 'transparent', color: 'primary.contrastText' }}
+                />
+                <Chip
+                  color="secondary"
+                  variant="outlined"
+                  label={`Visible: ${rows.length.toLocaleString('en-US')}`}
+                  sx={{ bgcolor: 'secondary.light', borderColor: 'transparent', color: 'secondary.contrastText' }}
+                />
+                <Chip
+                  variant="outlined"
+                  label={`Cost: ${currency.format(totals.cost)}`}
+                  sx={{ borderRadius: 2 }}
+                />
+                <Chip
+                  variant="outlined"
+                  label={`Consumption: ${number.format(totals.consumption)}`}
+                  sx={{ borderRadius: 2 }}
+                />
+              </Stack>
+            </Box>
+            {loading && <LinearProgress color="primary" />}
+          </Stack>
+        </Box>
 
-        {loading && <div className="goals-manager-loading">Loading {utility.toLowerCase()} bills...</div>}
-        {error && !loading && <div className="warning-banner">{error}</div>}
-        {statusMessage && !loading && !error && <div className="status-banner">{statusMessage}</div>}
-        {saveError && !loading && <div className="error-banner">{saveError}</div>}
-        {!loading && !error && rows.length === 0 && (
-          <div className="empty-state-large">
-            <div className="empty-state-icon">📄</div>
-            <h3>No records yet</h3>
-            <p>Upload {utility.toLowerCase()} bills to populate this table.</p>
-          </div>
-        )}
+        <Box sx={{ px: { xs: 1.5, md: 3 }, py: 3 }}>
+          <Stack spacing={2}>
+            {error && <Alert severity="error">{error}</Alert>}
+            {statusMessage && !error && <Alert severity="success">{statusMessage}</Alert>}
+            {saveError && !error && <Alert severity="warning">{saveError}</Alert>}
 
-        {!loading && !error && rows.length > 0 && (
-          <>
-            <div className="table-scroller">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    {TABLE_COLUMNS.map((column) => {
-                      const isActive = sortConfig?.key === column.key
-                      const direction = isActive ? sortConfig.direction : null
-                      const ariaSort = isActive ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'
-                      const icon = !isActive ? '↕' : direction === 'asc' ? '▲' : '▼'
-                      return (
-                        <th key={column.key} aria-sort={ariaSort}>
-                          <button
-                            type="button"
-                            className={`data-table__sort${isActive ? ` data-table__sort--active data-table__sort--${direction}` : ''}`}
+            {!error && rows.length === 0 && !loading && (
+              <Paper
+                variant="outlined"
+                sx={{
+                  py: 8,
+                  px: 4,
+                  textAlign: 'center',
+                  borderRadius: 3,
+                  borderStyle: 'dashed',
+                  color: 'text.secondary',
+                }}
+              >
+                <Typography variant="h5" gutterBottom>
+                  No records yet
+                </Typography>
+                <Typography variant="body2">
+                  Upload {utility.toLowerCase()} bills to populate this table and start analyzing trends.
+                </Typography>
+              </Paper>
+            )}
+
+            {!error && rows.length > 0 && (
+              <TableContainer
+                sx={{
+                  borderRadius: 2,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  backgroundColor: 'background.paper',
+                  maxHeight: '60vh',
+                }}
+              >
+                <Table stickyHeader aria-label="utility billing records">
+                  <TableHead>
+                    <TableRow>
+                      {TABLE_COLUMNS.map((column) => (
+                        <TableCell key={column.key} sortDirection={sortConfig.key === column.key ? sortConfig.direction : false} sx={{ minWidth: column.minWidth }}>
+                          <TableSortLabel
+                            active={sortConfig.key === column.key}
+                            direction={sortConfig.key === column.key ? sortConfig.direction : 'asc'}
                             onClick={() => handleSort(column.key)}
-                            aria-label={`Sort by ${column.label}`}
                           >
-                            <span>{column.label}</span>
-                            <span className="data-table__sort-icon" aria-hidden="true">
-                              {icon}
-                            </span>
-                          </button>
-                        </th>
-                      )
-                    })}
-                    <th aria-label="Row actions">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedRows.map((row) => {
-                    const isEditing = editingId === row.bill_id
-                    return (
-                      <tr key={row.bill_id} className={isEditing ? 'table-row--editing' : ''}>
-                        {TABLE_COLUMNS.map((column) => (
-                          <td key={column.key}>{renderCell(column.key, row, isEditing)}</td>
-                        ))}
-                        <td>
-                          {isEditing ? (
-                            <div className="table-edit-actions">
-                              <button type="button" className="ghost" onClick={cancelEdit} disabled={saving}>
-                                Cancel
-                              </button>
-                              <button type="button" className="primary" onClick={handleSave} disabled={saving}>
-                                {saving ? 'Saving…' : 'Save'}
-                              </button>
-                            </div>
+                            {column.label}
+                          </TableSortLabel>
+                        </TableCell>
+                      ))}
+                      <TableCell align="center" sx={{ minWidth: 120 }}>
+                        Actions
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {sortedRows.map((row) => (
+                      <TableRow key={row.bill_id} hover>
+                        <TableCell>{formatMonthYear(row.bill_date)}</TableCell>
+                        <TableCell>
+                          {row.service_start || row.service_end ? (
+                            <Typography variant="body2" color="text.primary">
+                              {(() => {
+                                const startLabel = formatFullDate(row.service_start)
+                                const endLabel = formatFullDate(row.service_end)
+                                const parts = [startLabel, endLabel].filter((label) => label !== '—')
+                                if (parts.length === 2) return `${parts[0]} – ${parts[1]}`
+                                if (parts.length === 1) return parts[0]
+                                return '—'
+                              })()}
+                            </Typography>
                           ) : (
-                            <button type="button" className="ghost" onClick={() => startEdit(row)}>
-                              Edit
-                            </button>
+                            '—'
                           )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <footer className="table-footer" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px' }}>
-              <div>
-                Showing {recordsStart.toLocaleString('en-US')} - {recordsEnd.toLocaleString('en-US')} of {totalCount.toLocaleString('en-US')} records
-              </div>
-              <div className="table-pagination" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <label className="input-control input-control--select table-pagination__pagesize" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px' }}>
-                  <span>Rows per page</span>
-                  <select
-                    value={pageSize}
-                    onChange={(event) => {
-                      setPageSize(Number(event.target.value))
-                      setPage(1)
-                    }}
-                  >
-                    {PAGE_SIZE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Typography variant="body2" color="text.primary">
+                              {number.format(row.consumption ?? 0)}
+                            </Typography>
+                            {row.units_of_measure ? (
+                              <Chip
+                                size="small"
+                                label={row.units_of_measure}
+                                color="secondary"
+                                variant="outlined"
+                                sx={{ bgcolor: 'secondary.light', borderColor: 'transparent', color: 'secondary.contrastText' }}
+                              />
+                            ) : null}
+                          </Stack>
+                        </TableCell>
+                        <TableCell>{currency.format(row.cost ?? 0)}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.primary" fontWeight={500}>
+                            {row.provider || '—'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {row.bill_type}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {row.city || row.state || row.zip ? (
+                            <Typography variant="body2" color="text.primary">
+                              {[row.city, row.state].filter(Boolean).join(', ')} {row.zip ? ` ${row.zip}` : ''}
+                            </Typography>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell>{formatFullDate(row.timestamp_upload)}</TableCell>
+                        <TableCell align="center">
+                          <Tooltip title="Edit bill">
+                            <IconButton color="primary" onClick={() => startEdit(row)}>
+                              <EditOutlined />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </select>
-                </label>
-                <button type="button" className="ghost" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page <= 1}>
-                  Previous
-                </button>
-                <span>Page {page} of {totalPages}</span>
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={page >= totalPages}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+
+            {rows.length > 0 && (
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={2}
+                alignItems={{ xs: 'flex-start', md: 'center' }}
+                justifyContent="space-between"
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Showing {recordsStart.toLocaleString('en-US')} - {recordsEnd.toLocaleString('en-US')} of{' '}
+                  {totalCount.toLocaleString('en-US')} records
+                </Typography>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+                  <FormControl size="small" sx={{ minWidth: 140 }}>
+                    <InputLabel id="rows-per-page-label">Rows per page</InputLabel>
+                    <Select
+                      labelId="rows-per-page-label"
+                      label="Rows per page"
+                      value={pageSize}
+                      onChange={(event) => {
+                        setPageSize(Number(event.target.value))
+                        setPage(1)
+                      }}
+                    >
+                      {PAGE_SIZE_OPTIONS.map((option) => (
+                        <MenuItem key={option} value={option}>
+                          {option}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <Pagination
+                    color="primary"
+                    shape="rounded"
+                    page={page}
+                    count={totalPages}
+                    onChange={(_, value) => setPage(value)}
+                  />
+                </Stack>
+              </Stack>
+            )}
+          </Stack>
+        </Box>
+      </Paper>
+
+      <Dialog
+        open={Boolean(editingId)}
+        onClose={cancelEdit}
+        fullWidth
+        maxWidth="sm"
+        aria-labelledby="edit-bill-dialog-title"
+      >
+        <DialogTitle id="edit-bill-dialog-title">Edit bill details</DialogTitle>
+        <DialogContent dividers sx={{ maxHeight: { xs: '70vh', md: '65vh' }, overflowY: 'auto' }}>
+          <Stack spacing={3}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <FormControl fullWidth>
+                <InputLabel id="bill-type-label">Utility</InputLabel>
+                <Select
+                  labelId="bill-type-label"
+                  value={formState.bill_type ?? utility}
+                  label="Utility"
+                  onChange={(event) => updateFormField('bill_type', event.target.value)}
                 >
-                  Next
-                </button>
-              </div>
-            </footer>
-          </>
-        )}
-      </section>
-    </div>
+                  {UTILITY_OPTIONS.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                label="Provider"
+                name="provider"
+                value={formState.provider ?? ''}
+                onChange={handleFieldChange}
+              />
+            </Stack>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                fullWidth
+                label="Bill Date"
+                type="date"
+                name="bill_date"
+                value={formState.bill_date ?? ''}
+                onChange={handleFieldChange}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                fullWidth
+                label="Uploaded"
+                value={formatFullDate(formState.timestamp_upload)}
+                InputProps={{ readOnly: true }}
+                disabled
+              />
+            </Stack>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                fullWidth
+                label="Service Start"
+                type="date"
+                name="service_start"
+                value={formState.service_start ?? ''}
+                onChange={handleFieldChange}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                fullWidth
+                label="Service End"
+                type="date"
+                name="service_end"
+                value={formState.service_end ?? ''}
+                onChange={handleFieldChange}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Stack>
+
+            <Divider flexItem />
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                fullWidth
+                label="Consumption"
+                type="number"
+                name="consumption"
+                value={formState.consumption ?? ''}
+                onChange={handleFieldChange}
+                inputProps={{ step: '0.01', min: 0 }}
+              />
+              <FormControl fullWidth>
+                <InputLabel id="units-label">Units</InputLabel>
+                <Select
+                  labelId="units-label"
+                  value={formState.units_of_measure ?? ''}
+                  label="Units"
+                  onChange={(event) => updateFormField('units_of_measure', event.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>None</em>
+                  </MenuItem>
+                  {UNITS_OPTIONS.map((unit) => (
+                    <MenuItem key={unit} value={unit}>
+                      {unit}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+
+            <TextField
+              fullWidth
+              label="Cost"
+              type="number"
+              name="cost"
+              value={formState.cost ?? ''}
+              onChange={handleFieldChange}
+              inputProps={{ step: '0.01', min: 0 }}
+            />
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                fullWidth
+                label="City"
+                name="city"
+                value={formState.city ?? ''}
+                onChange={handleFieldChange}
+              />
+              <TextField
+                fullWidth
+                label="State"
+                name="state"
+                value={formState.state ?? ''}
+                onChange={handleFieldChange}
+                inputProps={{ maxLength: 8, style: { textTransform: 'uppercase' } }}
+              />
+              <TextField
+                fullWidth
+                label="ZIP"
+                name="zip"
+                value={formState.zip ?? ''}
+                onChange={handleFieldChange}
+              />
+            </Stack>
+
+            {saveError && (
+              <Alert severity="error">{saveError}</Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={cancelEdit} color="inherit" disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} variant="contained" disabled={saving} startIcon={saving ? <CircularProgress size={18} color="inherit" /> : null}>
+            {saving ? 'Saving' : 'Save changes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   )
 }
 
