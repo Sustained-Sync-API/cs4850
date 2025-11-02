@@ -13,7 +13,6 @@ import {
   CircularProgress
 } from '@mui/material'
 import FlagIcon from '@mui/icons-material/Flag'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import LightbulbIcon from '@mui/icons-material/Lightbulb'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -22,147 +21,70 @@ import GoalsManager from '../components/GoalsManager'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-function BulletList({ text, enhanced = false }) {
+// Simple bullet list recommendations
+function BulletList({ text }) {
   if (!text) return (
     <Alert severity="info" icon={<LightbulbIcon />}>
       Insights will appear once data is available.
     </Alert>
   )
 
-  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean)
-
-  if (enhanced) {
-    const items = []
-    let currentSection = null
-
-    lines.forEach((line, idx) => {
-      const cleanLine = line
+  // Split text into lines and clean them
+  const lines = text
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => {
+      // Remove bullet points, numbering, and other prefixes
+      return line
         .replace(/^[•\-*►▸▹◦⦿⦾]\s*/, '')
-        .replace(/^\d+[\.)]\s*/, '')
+        .replace(/^\d+[\.\)\:]\s*/, '')
         .replace(/^#+\s*/, '')
+        .replace(/\*\*/g, '')
         .trim()
-
-      if (!cleanLine) return
-
-      const isHeading = 
-        cleanLine.endsWith(':') || 
-        (cleanLine.length < 60 && /^[A-Z\s]+$/.test(cleanLine)) ||
-        cleanLine.startsWith('**') ||
-        line.startsWith('#')
-
-      if (isHeading) {
-        currentSection = cleanLine.replace(/[:*]/g, '').trim()
-        items.push({ type: 'heading', text: currentSection, key: `heading-${idx}` })
-      } else {
-        const sentences = cleanLine.split(/(?<=[.!?])\s+(?=[A-Z])/)
-        sentences.forEach((sentence, sIdx) => {
-          const trimmedSentence = sentence.trim()
-          if (trimmedSentence) {
-            items.push({
-              type: 'item',
-              text: trimmedSentence,
-              section: currentSection,
-              key: `item-${idx}-${sIdx}`
-            })
-          }
-        })
-      }
     })
-
-    return (
-      <Stack spacing={2}>
-        {items.map((item) => {
-          if (item.type === 'heading') {
-            return (
-              <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
-                <LightbulbIcon sx={{ color: 'warning.main' }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  {item.text}
-                </Typography>
-              </Box>
-            )
-          }
-          
-          return (
-            <Box key={item.key} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-              <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
-              <Typography variant="body1" sx={{ flex: 1 }}>
-                {item.text}
-              </Typography>
-            </Box>
-          )
-        })}
-      </Stack>
-    )
-  }
+    .filter(line => line.length > 10) // Filter out very short lines
 
   return (
-    <Stack spacing={1.5} component="ul" sx={{ listStyle: 'none', pl: 0 }}>
-      {lines.map((line, idx) => (
-        <Box key={idx} component="li" sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-          <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
-          <Typography variant="body1">
-            {line.replace(/^[•\-*]\s*/, '').replace(/^\d+[\.)]\s*/, '')}
-          </Typography>
-        </Box>
-      ))}
-    </Stack>
+    <Paper 
+      elevation={0}
+      sx={{ 
+        p: 3, 
+        backgroundColor: 'rgba(37, 99, 235, 0.04)',
+        borderRadius: 2
+      }}
+    >
+      <Stack spacing={2}>
+        {lines.map((line, idx) => (
+          <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+            <Box 
+              sx={{ 
+                width: 6, 
+                height: 6, 
+                borderRadius: '50%', 
+                backgroundColor: 'primary.main',
+                mt: 1,
+                flexShrink: 0
+              }} 
+            />
+            <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+              {line}
+            </Typography>
+          </Box>
+        ))}
+      </Stack>
+    </Paper>
   )
 }
 
-function Sustainability() {
-  const [goals, setGoals] = useState([])
-  const [recommendations, setRecommendations] = useState('')
-  const [recommendationWarning, setRecommendationWarning] = useState('')
-  const [loading, setLoading] = useState({ goals: true, recommendations: true })
+function Sustainability({ goals = [], forecastData = null, recommendations = '', recommendationSources = null, recommendationWarning = '', loading = {}, onGoalsChange }) {
   const [showGoalsManager, setShowGoalsManager] = useState(false)
 
-  useEffect(() => {
-    fetchGoals()
-    fetchRecommendations()
-  }, [])
-
-  const fetchGoals = async () => {
-    setLoading(prev => ({ ...prev, goals: true }))
-    try {
-      const response = await fetch(`${API_BASE}/api/goals/`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Failed to load goals')
-      const normalizedGoals = Array.isArray(data.results)
-        ? data.results
-        : Array.isArray(data.goals)
-          ? data.goals
-          : []
-      setGoals(normalizedGoals)
-    } catch (err) {
-      console.error('Failed to fetch goals:', err)
-      setGoals([])
-    } finally {
-      setLoading(prev => ({ ...prev, goals: false }))
-    }
-  }
-
-  const fetchRecommendations = async () => {
-    setLoading(prev => ({ ...prev, recommendations: true }))
-    setRecommendationWarning('')
-    try {
-      const response = await fetch(`${API_BASE}/api/recommendations/`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || data.warning || 'Failed to load recommendations')
-      setRecommendations(data.recommendations || '')
-      if (data.warning) setRecommendationWarning(data.warning)
-    } catch (err) {
-      setRecommendations('')
-      setRecommendationWarning(err.message)
-    } finally {
-      setLoading(prev => ({ ...prev, recommendations: false }))
-    }
-  }
-
-  const handleGoalsChange = () => {
-    fetchGoals()
-    fetchRecommendations()
-  }
+  // Normalize goals array from props
+  const normalizedGoals = Array.isArray(goals) ? goals : []
+  
+  // Extract goal-focused recommendations from forecast data
+  const goalRecommendations = forecastData?.summaries?.total || ''
 
   return (
     <Box>
@@ -186,17 +108,17 @@ function Sustainability() {
                 </Typography>
               </Box>
               <Typography variant="body2" color="text.secondary">
-                {goals.length > 0 
-                  ? `You have ${goals.length} active goal${goals.length !== 1 ? 's' : ''} tracking your sustainability progress.`
+                {normalizedGoals.length > 0 
+                  ? `You have ${normalizedGoals.length} active goal${normalizedGoals.length !== 1 ? 's' : ''} tracking your sustainability progress.`
                   : 'Set up to 5 custom sustainability goals to guide your AI recommendations.'}
               </Typography>
             </Box>
             <Button
               variant="contained"
-              startIcon={goals.length > 0 ? <EditIcon /> : <AddIcon />}
+              startIcon={normalizedGoals.length > 0 ? <EditIcon /> : <AddIcon />}
               onClick={() => setShowGoalsManager(true)}
             >
-              {goals.length > 0 ? 'Manage Goals' : 'Set Your First Goal'}
+              {normalizedGoals.length > 0 ? 'Manage Goals' : 'Set Your First Goal'}
             </Button>
           </Box>
           
@@ -204,9 +126,9 @@ function Sustainability() {
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
-          ) : goals.length > 0 ? (
+          ) : normalizedGoals.length > 0 ? (
             <Grid container spacing={2}>
-              {goals.map((goal) => (
+              {normalizedGoals.map((goal) => (
                 <Grid item xs={12} md={6} key={goal.id}>
                   <Paper 
                     elevation={0}
@@ -292,22 +214,22 @@ function Sustainability() {
               </Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Generated from contextual RAG pipeline using live database records.
+              Goal-focused recommendations generated from your utility data and sustainability objectives.
             </Typography>
           </Box>
           
-          {recommendationWarning && (
-            <Alert severity="warning" sx={{ mb: 3 }}>
-              {recommendationWarning}
+          {forecastData?.error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {forecastData.error}
             </Alert>
           )}
           
-          {loading.recommendations ? (
+          {loading.forecast ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
           ) : (
-            <BulletList text={recommendations} enhanced={true} />
+            <BulletList text={goalRecommendations} />
           )}
         </CardContent>
       </Card>
@@ -315,7 +237,7 @@ function Sustainability() {
       {showGoalsManager && (
         <GoalsManager onClose={() => {
           setShowGoalsManager(false)
-          handleGoalsChange()
+          if (onGoalsChange) onGoalsChange()
         }} />
       )}
     </Box>

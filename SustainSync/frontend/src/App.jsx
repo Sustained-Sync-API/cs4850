@@ -52,15 +52,138 @@ const useHashRoute = (defaultRoute) => {
 function App() {
   const [route, navigate] = useHashRoute(DEFAULT_ROUTE)
 
+  // Shared state across pages
+  const [sharedData, setSharedData] = useState({
+    dashboardForecastData: null,
+    sustainabilityForecastData: null,
+    recommendations: '',
+    recommendationSources: null,
+    recommendationWarning: '',
+    goals: [],
+    loading: {
+      dashboardForecast: true,
+      sustainabilityForecast: true,
+      recommendations: true,
+      goals: true
+    }
+  })
+
+  // Fetch dashboard forecast data (Key Trends, Cost Efficiency, Actionable Recommendations)
+  const fetchDashboardForecast = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/forecast/?periods=12&format=dashboard`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to load forecast')
+      setSharedData(prev => ({ ...prev, dashboardForecastData: data, loading: { ...prev.loading, dashboardForecast: false } }))
+    } catch (error) {
+      setSharedData(prev => ({ ...prev, dashboardForecastData: { error: error.message }, loading: { ...prev.loading, dashboardForecast: false } }))
+    }
+  }
+
+  // Fetch sustainability forecast data (goal-focused recommendations)
+  const fetchSustainabilityForecast = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/forecast/?periods=12&format=sustainability`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to load forecast')
+      setSharedData(prev => ({ ...prev, sustainabilityForecastData: data, loading: { ...prev.loading, sustainabilityForecast: false } }))
+    } catch (error) {
+      setSharedData(prev => ({ ...prev, sustainabilityForecastData: { error: error.message }, loading: { ...prev.loading, sustainabilityForecast: false } }))
+    }
+  }
+
+  // Fetch recommendations
+  const fetchRecommendations = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/recommendations/`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || data.warning || 'Unable to load recommendations')
+      setSharedData(prev => ({
+        ...prev,
+        recommendations: data.recommendations || '',
+        recommendationSources: data.sources || null,
+        recommendationWarning: data.warning || '',
+        loading: { ...prev.loading, recommendations: false }
+      }))
+    } catch (error) {
+      setSharedData(prev => ({
+        ...prev,
+        recommendations: '',
+        recommendationSources: null,
+        recommendationWarning: error.message,
+        loading: { ...prev.loading, recommendations: false }
+      }))
+    }
+  }
+
+  // Fetch goals
+  const fetchGoals = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/goals/`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to load goals')
+      setSharedData(prev => ({ ...prev, goals: data.goals || [], loading: { ...prev.loading, goals: false } }))
+    } catch (error) {
+      setSharedData(prev => ({ ...prev, goals: [], loading: { ...prev.loading, goals: false } }))
+    }
+  }
+
+  // Load shared data once on mount
+  useEffect(() => {
+    fetchDashboardForecast()
+    fetchSustainabilityForecast()
+    fetchRecommendations()
+    fetchGoals()
+  }, [])
+
+  // Refresh recommendations when goals change
+  const handleGoalsChange = () => {
+    fetchGoals()
+    fetchRecommendations()
+    fetchSustainabilityForecast() // Refresh sustainability forecast since it's goal-focused
+  }
+
+  // Refresh all shared data
+  const handleDataRefresh = () => {
+    fetchDashboardForecast()
+    fetchSustainabilityForecast()
+    fetchRecommendations()
+  }
+
   const renderPage = () => {
     switch (route) {
       case 'tables':
         return <Tables />
       case 'sustainability':
-        return <Sustainability />
+        return (
+          <Sustainability
+            goals={sharedData.goals}
+            forecastData={sharedData.sustainabilityForecastData}
+            recommendations={sharedData.recommendations}
+            recommendationSources={sharedData.recommendationSources}
+            recommendationWarning={sharedData.recommendationWarning}
+            loading={{
+              ...sharedData.loading,
+              forecast: sharedData.loading.sustainabilityForecast
+            }}
+            onGoalsChange={handleGoalsChange}
+          />
+        )
       case 'dashboard':
       default:
-        return <Dashboard />
+        return (
+          <Dashboard
+            forecastData={sharedData.dashboardForecastData}
+            recommendations={sharedData.recommendations}
+            recommendationSources={sharedData.recommendationSources}
+            recommendationWarning={sharedData.recommendationWarning}
+            loading={{
+              ...sharedData.loading,
+              forecast: sharedData.loading.dashboardForecast
+            }}
+            onDataRefresh={handleDataRefresh}
+          />
+        )
     }
   }
 
@@ -83,7 +206,7 @@ function App() {
             '& .MuiDrawer-paper': {
               width: DRAWER_WIDTH,
               boxSizing: 'border-box',
-              borderRight: 'none',
+              border: 'none',
               backgroundImage: 'linear-gradient(180deg, #0b2720 0%, #041510 100%)',
               color: 'rgba(241, 245, 249, 0.95)',
               display: 'flex',
@@ -158,7 +281,7 @@ function App() {
           component="main"
           sx={{
             flexGrow: 1,
-            bgcolor: 'background.default',
+            bgcolor: '#ffffff',
             p: 4,
             minHeight: '100vh',
           }}

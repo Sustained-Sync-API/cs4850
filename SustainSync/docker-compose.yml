@@ -27,7 +27,19 @@ services:
       - OLLAMA_HOST=ollama
       - OLLAMA_PORT=11434
       - ENABLE_LLM_SUMMARIES=true
-      - ENABLE_LLM_SUMMARIES=true
+      # AI Model Configuration
+      # Use different models for different purposes:
+      # OLLAMA_MODEL: Default fallback model (default: llama3.2:latest)
+      # OLLAMA_INSIGHTS_MODEL: Model for general data analysis/insights (default: uses OLLAMA_MODEL)
+      # OLLAMA_RECOMMENDATIONS_MODEL: Model for sustainability recommendations (default: uses OLLAMA_MODEL)
+      # 
+      # Example: Use llama3.2 for insights and mistral for recommendations
+      # - OLLAMA_INSIGHTS_MODEL=llama3.2:latest
+      # - OLLAMA_RECOMMENDATIONS_MODEL=mistral:latest
+      #
+      # Uncomment and set these to use separate models:
+      # - OLLAMA_INSIGHTS_MODEL=llama3.2:latest
+      # - OLLAMA_RECOMMENDATIONS_MODEL=llama3.2:latest
     depends_on:
       - db
     ports:

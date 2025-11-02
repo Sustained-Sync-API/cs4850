@@ -41,7 +41,20 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const UTILITY_OPTIONS = ['Power', 'Gas', 'Water']
 const PAGE_SIZE_OPTIONS = [20, 50, 100]
 const DEFAULT_PAGE_SIZE = 20
-const UNITS_OPTIONS = ['kWh', 'therms', 'CCF']
+
+// Units mapping by utility type
+const UTILITY_UNITS = {
+  Power: ['kWh', 'MWh'],
+  Gas: ['therms', 'CCF', 'MCF'],
+  Water: ['gallons', 'CCF', 'kgal'],
+}
+
+// Default unit for each utility type
+const DEFAULT_UNITS = {
+  Power: 'kWh',
+  Gas: 'therms',
+  Water: 'gallons',
+}
 
 const TABLE_COLUMNS = [
   { key: 'bill_date', label: 'Bill Date', sortType: 'date', minWidth: 140, defaultDirection: 'desc' },
@@ -182,6 +195,14 @@ function Tables() {
       { cost: 0, consumption: 0 }
     )
   }, [rows])
+
+  const getUnitsForUtility = (utilityType) => {
+    return UTILITY_UNITS[utilityType] || []
+  }
+
+  const getDefaultUnit = (utilityType) => {
+    return DEFAULT_UNITS[utilityType] || 'units'
+  }
 
   const updateFormField = (name, value) => {
     setFormState((prev) => ({ ...prev, [name]: value }))
@@ -437,7 +458,7 @@ function Tables() {
                 />
                 <Chip
                   variant="outlined"
-                  label={`Consumption: ${number.format(totals.consumption)}`}
+                  label={`Consumption: ${number.format(totals.consumption)} ${getDefaultUnit(utility)}`}
                   sx={{ borderRadius: 2 }}
                 />
               </Stack>
@@ -474,101 +495,118 @@ function Tables() {
             )}
 
             {!error && rows.length > 0 && (
-              <TableContainer
-                sx={{
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  backgroundColor: 'background.paper',
-                  maxHeight: '60vh',
-                }}
-              >
-                <Table stickyHeader aria-label="utility billing records">
-                  <TableHead>
-                    <TableRow>
-                      {TABLE_COLUMNS.map((column) => (
-                        <TableCell key={column.key} sortDirection={sortConfig.key === column.key ? sortConfig.direction : false} sx={{ minWidth: column.minWidth }}>
-                          <TableSortLabel
-                            active={sortConfig.key === column.key}
-                            direction={sortConfig.key === column.key ? sortConfig.direction : 'asc'}
-                            onClick={() => handleSort(column.key)}
-                          >
-                            {column.label}
-                          </TableSortLabel>
-                        </TableCell>
-                      ))}
-                      <TableCell align="center" sx={{ minWidth: 120 }}>
-                        Actions
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {sortedRows.map((row) => (
-                      <TableRow key={row.bill_id} hover>
-                        <TableCell>{formatMonthYear(row.bill_date)}</TableCell>
-                        <TableCell>
-                          {row.service_start || row.service_end ? (
-                            <Typography variant="body2" color="text.primary">
-                              {(() => {
-                                const startLabel = formatFullDate(row.service_start)
-                                const endLabel = formatFullDate(row.service_end)
-                                const parts = [startLabel, endLabel].filter((label) => label !== '—')
-                                if (parts.length === 2) return `${parts[0]} – ${parts[1]}`
-                                if (parts.length === 1) return parts[0]
-                                return '—'
-                              })()}
-                            </Typography>
-                          ) : (
-                            '—'
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Typography variant="body2" color="text.primary">
-                              {number.format(row.consumption ?? 0)}
-                            </Typography>
-                            {row.units_of_measure ? (
-                              <Chip
-                                size="small"
-                                label={row.units_of_measure}
-                                color="secondary"
-                                variant="outlined"
-                                sx={{ bgcolor: 'secondary.light', borderColor: 'transparent', color: 'secondary.contrastText' }}
-                              />
-                            ) : null}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>{currency.format(row.cost ?? 0)}</TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="text.primary" fontWeight={500}>
-                            {row.provider || '—'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {row.bill_type}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          {row.city || row.state || row.zip ? (
-                            <Typography variant="body2" color="text.primary">
-                              {[row.city, row.state].filter(Boolean).join(', ')} {row.zip ? ` ${row.zip}` : ''}
-                            </Typography>
-                          ) : (
-                            '—'
-                          )}
-                        </TableCell>
-                        <TableCell>{formatFullDate(row.timestamp_upload)}</TableCell>
-                        <TableCell align="center">
-                          <Tooltip title="Edit bill">
-                            <IconButton color="primary" onClick={() => startEdit(row)}>
-                              <EditOutlined />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <>
+                {UTILITY_OPTIONS.map((utilityType) => {
+                  const utilityRows = sortedRows.filter((row) => row.bill_type === utilityType)
+                  if (utilityType !== utility || utilityRows.length === 0) return null
+
+                  return (
+                    <TableContainer
+                      key={utilityType}
+                      sx={{
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        backgroundColor: 'background.paper',
+                        maxHeight: '60vh',
+                      }}
+                    >
+                      <Table stickyHeader aria-label={`${utilityType} billing records`}>
+                        <TableHead>
+                          <TableRow>
+                            {TABLE_COLUMNS.map((column) => (
+                              <TableCell 
+                                key={column.key} 
+                                sortDirection={sortConfig.key === column.key ? sortConfig.direction : false} 
+                                sx={{ minWidth: column.minWidth }}
+                              >
+                                <TableSortLabel
+                                  active={sortConfig.key === column.key}
+                                  direction={sortConfig.key === column.key ? sortConfig.direction : 'asc'}
+                                  onClick={() => handleSort(column.key)}
+                                >
+                                  {column.key === 'consumption' ? `${column.label} (${getDefaultUnit(utilityType)})` : column.label}
+                                </TableSortLabel>
+                              </TableCell>
+                            ))}
+                            <TableCell align="center" sx={{ minWidth: 120 }}>
+                              Actions
+                            </TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {utilityRows.map((row) => (
+                            <TableRow key={row.bill_id} hover>
+                              <TableCell>{formatMonthYear(row.bill_date)}</TableCell>
+                              <TableCell>
+                                {row.service_start || row.service_end ? (
+                                  <Typography variant="body2" color="text.primary">
+                                    {(() => {
+                                      const startLabel = formatFullDate(row.service_start)
+                                      const endLabel = formatFullDate(row.service_end)
+                                      const parts = [startLabel, endLabel].filter((label) => label !== '—')
+                                      if (parts.length === 2) return `${parts[0]} – ${parts[1]}`
+                                      if (parts.length === 1) return parts[0]
+                                      return '—'
+                                    })()}
+                                  </Typography>
+                                ) : (
+                                  '—'
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <Typography variant="body2" color="text.primary">
+                                    {number.format(row.consumption ?? 0)}
+                                  </Typography>
+                                  <Chip
+                                    size="small"
+                                    label={row.units_of_measure || getDefaultUnit(utilityType)}
+                                    color="secondary"
+                                    variant="outlined"
+                                    sx={{ 
+                                      bgcolor: 'secondary.light', 
+                                      borderColor: 'transparent', 
+                                      color: 'secondary.contrastText',
+                                      fontWeight: 600 
+                                    }}
+                                  />
+                                </Stack>
+                              </TableCell>
+                              <TableCell>{currency.format(row.cost ?? 0)}</TableCell>
+                              <TableCell>
+                                <Typography variant="body2" color="text.primary" fontWeight={500}>
+                                  {row.provider || '—'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {row.bill_type}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                {row.city || row.state || row.zip ? (
+                                  <Typography variant="body2" color="text.primary">
+                                    {[row.city, row.state].filter(Boolean).join(', ')} {row.zip ? ` ${row.zip}` : ''}
+                                  </Typography>
+                                ) : (
+                                  '—'
+                                )}
+                              </TableCell>
+                              <TableCell>{formatFullDate(row.timestamp_upload)}</TableCell>
+                              <TableCell align="center">
+                                <Tooltip title="Edit bill">
+                                  <IconButton color="primary" onClick={() => startEdit(row)}>
+                                    <EditOutlined />
+                                  </IconButton>
+                                </Tooltip>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )
+                })}
+              </>
             )}
 
             {rows.length > 0 && (
@@ -713,7 +751,7 @@ function Tables() {
                   <MenuItem value="">
                     <em>None</em>
                   </MenuItem>
-                  {UNITS_OPTIONS.map((unit) => (
+                  {getUnitsForUtility(formState.bill_type || utility).map((unit) => (
                     <MenuItem key={unit} value={unit}>
                       {unit}
                     </MenuItem>

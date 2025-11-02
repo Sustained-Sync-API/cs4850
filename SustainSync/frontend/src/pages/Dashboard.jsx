@@ -13,7 +13,10 @@ import {
   Tab,
   Chip,
   CircularProgress,
-  Divider
+  Divider,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DownloadIcon from '@mui/icons-material/Download'
@@ -26,6 +29,10 @@ import WaterDropIcon from '@mui/icons-material/WaterDrop'
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment'
 import ElectricBoltIcon from '@mui/icons-material/ElectricBolt'
 import InsightsIcon from '@mui/icons-material/Insights'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import LightbulbIcon from '@mui/icons-material/Lightbulb'
+import SavingsIcon from '@mui/icons-material/Savings'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
@@ -48,6 +55,29 @@ const formatMonthLabel = (dateString) => {
 const formatValueLabel = (value, isCurrency = false) => {
   if (value === null || value === undefined) return '—'
   return isCurrency ? currency.format(value) : number.format(value)
+}
+
+// Utility units mapping
+const UTILITY_UNITS = {
+  Power: 'kWh',
+  Gas: 'therms',
+  Water: 'gallons'
+}
+
+const getUnitForUtility = (utilityType) => {
+  return UTILITY_UNITS[utilityType] || 'units'
+}
+
+// Filter data to last 3 years
+const filterLast3Years = (data = []) => {
+  if (!data.length) return []
+  const threeYearsAgo = new Date()
+  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3)
+  return data.filter(item => {
+    if (!item.date) return false
+    const itemDate = new Date(item.date)
+    return itemDate >= threeYearsAgo
+  })
 }
 
 const mapHistoryToSeries = (history = []) =>
@@ -79,8 +109,9 @@ const mapForecastToCostSeries = (series = []) =>
   }))
 
 // Simple line chart component
-function SimpleLineChart({ actual = [], forecast = [], height = 220 }) {
+function SimpleLineChart({ actual = [], forecast = [], height = 220, dataLabel = 'Usage', units = 'units' }) {
   const padding = 36
+  const rightPadding = 30
   const width = 550
 
   const combined = actual
@@ -199,7 +230,7 @@ function SimpleLineChart({ actual = [], forecast = [], height = 220 }) {
     </div>
   )
 }// Visualise multiple utilities together with brand-coloured series.
-function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }) {
+function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260, dataLabel = 'Usage', units = 'mixed' }) {
   if (!datasets.length || !timeline.length) {
     return <div className="chart-empty">Forecast will appear once at least one utility has history.</div>
   }
@@ -319,6 +350,209 @@ function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }
         ))}
       </div>
     </div>
+  )
+}
+
+// Accordion-style recommendations component
+function RecommendationsAccordion({ text }) {
+  const [expanded, setExpanded] = useState('trends')
+
+  if (!text) return (
+    <Alert severity="info">
+      Insights will appear once data is available.
+    </Alert>
+  )
+
+  const handleChange = (panel) => (event, isExpanded) => {
+    setExpanded(isExpanded ? panel : false)
+  }
+
+  // Parse recommendations text into categories
+  const parseRecommendations = (text) => {
+    const categories = {
+      trends: [],
+      efficiency: [],
+      recommendations: []
+    }
+
+    const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean)
+    let currentCategory = null
+
+    lines.forEach((line) => {
+      // Check if this is a section header
+      const headerMatch = line.match(/^\*?\*?(Key Trend|Cost Efficiency|Actionable Recommendation)s?:?\*?\*?/i)
+      
+      if (headerMatch) {
+        const header = headerMatch[1].toLowerCase()
+        if (header.includes('trend')) {
+          currentCategory = 'trends'
+        } else if (header.includes('efficiency')) {
+          currentCategory = 'efficiency'
+        } else if (header.includes('recommendation')) {
+          currentCategory = 'recommendations'
+        }
+        return // Skip the header line itself
+      }
+
+      // Clean the line for content
+      const cleanLine = line
+        .replace(/^[•\-*►▸▹◦⦿⦾]\s*/, '') // Remove bullet points
+        .replace(/^\d+[\.)\:]\s*/, '') // Remove numbering
+        .replace(/^#+\s*/, '') // Remove markdown headers
+        .replace(/^\*\*(.*?)\*\*:?/, '$1') // Remove bold markers
+        .replace(/\*\*/g, '') // Remove any remaining bold markers
+        .trim()
+
+      if (!cleanLine || cleanLine.length < 10) return // Skip empty or very short lines
+
+      // Skip lines that look like sub-headers or metadata
+      if (cleanLine.endsWith(':') || 
+          cleanLine.toLowerCase().startsWith('data evidence') ||
+          cleanLine.toLowerCase().startsWith('goal alignment') ||
+          cleanLine.toLowerCase().startsWith('expected impact') ||
+          cleanLine.toLowerCase().startsWith('next steps') ||
+          cleanLine.toLowerCase().startsWith('requirements')) {
+        return
+      }
+
+      // Add to current category if we have one
+      if (currentCategory && categories[currentCategory]) {
+        categories[currentCategory].push(cleanLine)
+      }
+    })
+
+    return categories
+  }
+
+  const categories = parseRecommendations(text)
+
+  return (
+    <Box>
+      <Accordion 
+        expanded={expanded === 'trends'} 
+        onChange={handleChange('trends')}
+        sx={{ 
+          '&:before': { display: 'none' },
+          boxShadow: 'none',
+          border: '1px solid',
+          borderColor: 'divider',
+          '&:not(:last-child)': { mb: 1 }
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{ 
+            bgcolor: expanded === 'trends' ? 'primary.light' : 'grey.50',
+            '&:hover': { bgcolor: 'primary.light' }
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <TrendingUpIcon color="primary" />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Key Trends
+            </Typography>
+            <Chip label={categories.trends.length} size="small" color="primary" />
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ bgcolor: 'background.paper' }}>
+          {categories.trends.length > 0 ? (
+            <Stack spacing={2}>
+              {categories.trends.map((item, idx) => (
+                <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                  <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
+                  <Typography variant="body1">{item}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">No trend data available</Typography>
+          )}
+        </AccordionDetails>
+      </Accordion>
+
+      <Accordion 
+        expanded={expanded === 'efficiency'} 
+        onChange={handleChange('efficiency')}
+        sx={{ 
+          '&:before': { display: 'none' },
+          boxShadow: 'none',
+          border: '1px solid',
+          borderColor: 'divider',
+          '&:not(:last-child)': { mb: 1 }
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{ 
+            bgcolor: expanded === 'efficiency' ? 'success.light' : 'grey.50',
+            '&:hover': { bgcolor: 'success.light' }
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <SavingsIcon color="success" />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Cost Efficiency
+            </Typography>
+            <Chip label={categories.efficiency.length} size="small" color="success" />
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ bgcolor: 'background.paper' }}>
+          {categories.efficiency.length > 0 ? (
+            <Stack spacing={2}>
+              {categories.efficiency.map((item, idx) => (
+                <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                  <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
+                  <Typography variant="body1">{item}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">No efficiency data available</Typography>
+          )}
+        </AccordionDetails>
+      </Accordion>
+
+      <Accordion 
+        expanded={expanded === 'recommendations'} 
+        onChange={handleChange('recommendations')}
+        sx={{ 
+          '&:before': { display: 'none' },
+          boxShadow: 'none',
+          border: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{ 
+            bgcolor: expanded === 'recommendations' ? 'warning.light' : 'grey.50',
+            '&:hover': { bgcolor: 'warning.light' }
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <LightbulbIcon color="warning" />
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Actionable Recommendations
+            </Typography>
+            <Chip label={categories.recommendations.length} size="small" color="warning" />
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ bgcolor: 'background.paper' }}>
+          {categories.recommendations.length > 0 ? (
+            <Stack spacing={2}>
+              {categories.recommendations.map((item, idx) => (
+                <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                  <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
+                  <Typography variant="body1">{item}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">No recommendations available</Typography>
+          )}
+        </AccordionDetails>
+      </Accordion>
+    </Box>
   )
 }
 
@@ -460,17 +694,16 @@ function TabPanel({ tabs = [], activeTab, onTabChange }) {
   )
 }
 
-function Dashboard({ forecastData, recommendations, recommendationSources, recommendationWarning, loading: sharedLoading, onDataRefresh }) {
+function Dashboard({ forecastData = null, recommendations = '', recommendationSources = null, recommendationWarning = '', loading: sharedLoading = {}, onDataRefresh }) {
   const [metrics, setMetrics] = useState(null)
-  const [forecastData, setForecastData] = useState(null)
-  const [recommendations, setRecommendations] = useState('')
   const [uploadResult, setUploadResult] = useState(null)
   const [activeUtilityTab, setActiveUtilityTab] = useState('all')
   const [loading, setLoading] = useState({
     metrics: true,
-    forecast: true,
-    recommendations: true,
   })
+  
+  // Extract insights from forecast summaries (uses dashboard format with 3 sections)
+  const dashboardInsights = forecastData?.summaries?.[activeUtilityTab] || forecastData?.summaries?.total || ''
 
   const fetchMetrics = async () => {
     try {
@@ -485,36 +718,8 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
     }
   }
 
-  const fetchForecast = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/forecast/?periods=12`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to load forecast')
-      setForecastData(data)
-    } catch (error) {
-      setForecastData({ error: error.message })
-    } finally {
-      setLoading(prev => ({ ...prev, forecast: false }))
-    }
-  }
-
-  const fetchRecommendations = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/recommendations/`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to load recommendations')
-      setRecommendations(data.recommendations || '')
-    } catch (error) {
-      setRecommendations('')
-    } finally {
-      setLoading(prev => ({ ...prev, recommendations: false }))
-    }
-  }
-
   useEffect(() => {
     fetchMetrics()
-    fetchForecast()
-    fetchRecommendations()
   }, [])
 
   const handleFileUpload = async (event) => {
@@ -537,10 +742,9 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
       setUploadResult({ ...data, filename: file.name })
 
       if (!data.errors?.length) {
-        setLoading({ metrics: true, forecast: true, recommendations: true })
+        setLoading({ metrics: true })
         fetchMetrics()
-        fetchForecast()
-        fetchRecommendations()
+        if (onDataRefresh) onDataRefresh()
       }
     } catch (error) {
       setUploadResult({ status: 'error', error: error.message, filename: file.name })
@@ -590,8 +794,11 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
     return tabs
   }, [forecastData])
 
+  // Debug: Log to console
+  console.log('Dashboard rendering with:', { forecastData, recommendations, loading: sharedLoading })
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, bgcolor: 'white', minHeight: '100vh' }}>
       {/* Header */}
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
         <Box>
@@ -784,70 +991,50 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
 
               <Box sx={{ mt: 3 }}>
                 {activeUtilityTab === 'all' ? (
-                  // All utilities view
-                  <Box>
-                    {forecastData?.history && forecastData?.series && (
-                      <Box sx={{ 
-                        bgcolor: 'grey.50', 
-                        borderRadius: 2, 
-                        p: 3,
-                        mb: 3
-                      }}>
-                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                          Total Forecast
-                        </Typography>
-                        <SimpleLineChart
-                          actual={mapHistoryToSeries(forecastData.history || [])}
-                          forecast={mapForecastToSeries(forecastData.series || [])}
-                          height={240}
-                        />
-                      </Box>
-                    )}
+                  // All utilities view - single conjoined chart
+                  <Box sx={{ 
+                    bgcolor: 'grey.50', 
+                    borderRadius: 2, 
+                    p: 3
+                  }}>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      All Utilities Comparison
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Compare actual usage and forecasts across all utility types
+                    </Typography>
+                    {(() => {
+                      const breakdown = forecastData?.breakdown || []
+                      if (breakdown.length === 0) {
+                        return <Alert severity="info">No utility data available yet.</Alert>
+                      }
 
-                    <Grid container spacing={3}>
-                      {(forecastData?.breakdown || []).map((utilityData) => {
-                        if (utilityData.error) {
-                          return (
-                            <Grid item xs={12} md={6} lg={4} key={utilityData.bill_type}>
-                              <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                  {utilityData.bill_type}
-                                </Typography>
-                                <Alert severity="info">{utilityData.error}</Alert>
-                              </Paper>
-                            </Grid>
-                          )
-                        }
+                      // Build datasets for multi-series chart
+                      const datasets = breakdown
+                        .filter((utilityData) => !utilityData.error && utilityData.history && utilityData.series)
+                        .map((utilityData) => ({
+                          key: utilityData.bill_type.toLowerCase(),
+                          label: utilityData.bill_type,
+                          actual: mapHistoryToSeries(utilityData.history || []),
+                          forecast: mapForecastToSeries(utilityData.series || []),
+                        }))
 
-                        return (
-                          <Grid item xs={12} md={6} lg={4} key={utilityData.bill_type}>
-                            <Paper 
-                              elevation={0} 
-                              sx={{ 
-                                p: 2.5, 
-                                border: '1px solid', 
-                                borderColor: 'divider',
-                                height: '100%',
-                                transition: 'all 0.2s',
-                                '&:hover': {
-                                  boxShadow: 3,
-                                  borderColor: 'primary.main',
-                                }
-                              }}
-                            >
-                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                                {utilityData.bill_type}
-                              </Typography>
-                              <SimpleLineChart
-                                actual={mapHistoryToSeries(utilityData.history || [])}
-                                forecast={mapForecastToSeries(utilityData.series || [])}
-                                height={180}
-                              />
-                            </Paper>
-                          </Grid>
-                        )
-                      })}
-                    </Grid>
+                      // Build unified timeline
+                      const allDates = new Set()
+                      datasets.forEach((dataset) => {
+                        dataset.actual.forEach((point) => allDates.add(point.date))
+                        dataset.forecast.forEach((point) => allDates.add(point.date))
+                      })
+                      const timeline = Array.from(allDates)
+                        .sort()
+                        .map((date) => ({ date, label: formatMonthLabel(date) }))
+
+                      if (datasets.length === 0) {
+                        return <Alert severity="info">No complete forecast data available for comparison.</Alert>
+                      }
+
+                      return <MultiSeriesForecastChart datasets={datasets} timeline={timeline} height={320} />
+                    })()}
                   </Box>
                 ) : (
                   // Individual utility view
@@ -897,6 +1084,8 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
                             actual={mapHistoryToSeries(utilityData.history || [])}
                             forecast={mapForecastToSeries(utilityData.series || [])}
                             height={260}
+                            dataLabel="Usage"
+                            units={getUnitForUtility(utilityData.bill_type)}
                           />
                         </Box>
                       </Box>
@@ -915,28 +1104,19 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
             <InsightsIcon color="primary" />
             <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              AI-Powered Sustainability Recommendations
+              AI-Powered Sustainability Insights
             </Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Based on your consumption patterns and forecast data
+            Based on your consumption patterns and forecast data for {activeUtilityTab === 'all' ? 'all utilities' : activeUtilityTab}
           </Typography>
           
-          {loading.recommendations ? (
+          {sharedLoading.forecast ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
           ) : (
-            <Paper 
-              elevation={0} 
-              sx={{ 
-                p: 3, 
-                bgcolor: 'grey.50',
-                borderRadius: 2
-              }}
-            >
-              <BulletList text={recommendations} enhanced={true} />
-            </Paper>
+            <RecommendationsAccordion text={dashboardInsights} />
           )}
         </CardContent>
       </Card>

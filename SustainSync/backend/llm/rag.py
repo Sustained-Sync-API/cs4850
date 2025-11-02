@@ -1,4 +1,41 @@
 # ---- /llm/rag_gpu.py ----
+"""
+RAG Pipeline for SustainSync with Multi-Model Support
+
+This module provides RAG (Retrieval Augmented Generation) capabilities for
+analyzing utility billing data and generating sustainability recommendations.
+
+MULTI-MODEL CONFIGURATION:
+--------------------------
+The system supports using different LLM models for different purposes:
+
+1. OLLAMA_INSIGHTS_MODEL (default: llama3.2:latest)
+   - Used for general data analysis and insights
+   - Called by run_query() function
+   - Analyzes consumption patterns, trends, and forecasts
+
+2. OLLAMA_RECOMMENDATIONS_MODEL (default: llama3.2:latest)
+   - Used for sustainability recommendations
+   - Called during forecast generation with include_summaries=True
+   - Generates Key Trends, Cost Efficiency, and Actionable Recommendations
+
+3. OLLAMA_MODEL (default: llama3.2:latest)
+   - Fallback model when specific models aren't configured
+
+CONFIGURATION:
+-------------
+Set environment variables in docker-compose.yml or .env:
+
+    OLLAMA_INSIGHTS_MODEL=llama3.2:latest          # For data analysis
+    OLLAMA_RECOMMENDATIONS_MODEL=mistral:latest    # For sustainability advice
+    OLLAMA_MODEL=llama3.2:latest                   # Fallback
+
+Example use cases:
+- Use a faster model (llama3.2) for quick insights
+- Use a more specialized model (mistral) for detailed recommendations
+- Use the same model for both by only setting OLLAMA_MODEL
+"""
+
 import os
 import logging
 import pandas as pd
@@ -255,8 +292,18 @@ def compute_metrics_hint(df):
     return "Recent sustainability summary: " + " ".join(hint)
 
 
-# 4. LLM query with Llama 3.2
-def ask_llm(context, question):
+# 4. LLM query with configurable model support
+def ask_llm(context, question, model_name=None):
+    """Query LLM with optional model selection.
+    
+    Args:
+        context: Context information to provide to the model
+        question: Question/prompt to ask the model
+        model_name: Optional model name. Options:
+            - 'insights': Use OLLAMA_INSIGHTS_MODEL (for general data analysis)
+            - 'recommendations': Use OLLAMA_RECOMMENDATIONS_MODEL (for sustainability advice)
+            - None or other: Use default OLLAMA_MODEL
+    """
     # preamble = (
     #     "You are an intelligent energy billing analyst. "
     #     "Use the context data covering years 2015–2024 from Duluth, GA, "
@@ -297,15 +344,26 @@ def ask_llm(context, question):
 
     # 1) Prefer HTTP call to Ollama's native generate endpoint
     # Ollama 0.12.6 uses /api/generate, not OpenAI-compatible /v1/completions
+    
+    # Select model based on model_name parameter
+    if model_name == 'insights':
+        selected_model = os.environ.get('OLLAMA_INSIGHTS_MODEL', os.environ.get('OLLAMA_MODEL', 'llama3.2:latest'))
+    elif model_name == 'recommendations':
+        selected_model = os.environ.get('OLLAMA_RECOMMENDATIONS_MODEL', os.environ.get('OLLAMA_MODEL', 'llama3.2:latest'))
+    else:
+        selected_model = os.environ.get('OLLAMA_MODEL', 'llama3.2:latest')
+    
     try:
         OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'ollama')
         OLLAMA_PORT = os.environ.get('OLLAMA_PORT', '11434')
         url = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/api/generate"
         payload = {
-            'model': os.environ.get('OLLAMA_MODEL', 'llama3.2:latest'),
+            'model': selected_model,
             'prompt': prompt,
             'stream': False,
         }
+        
+        logger.info(f"Using model '{selected_model}' for {'insights' if model_name == 'insights' else 'recommendations' if model_name == 'recommendations' else 'general query'}")
 
         # Prepare a requests session with retry logic for transient errors
         session = requests.Session()
@@ -344,9 +402,9 @@ def ask_llm(context, question):
     _init_ollama_client_if_needed()
     if _OLLAMA_AVAILABLE and client is not None:
         try:
-            # Use generate() method for Ollama native API
+            # Use generate() method for Ollama native API with selected model
             res = client.generate(
-                model="llama3.2",
+                model=selected_model,
                 prompt=prompt
             )
             if isinstance(res, dict) and 'response' in res:
@@ -562,26 +620,116 @@ def _build_usage_context(df, forecast_result, label):
     return context, fallback
 
 
-def _summarize_usage_with_llm(label, context, fallback):
-    """Request a concise optimisation summary for the provided utility slice."""
+def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboard_format=False):
+    """Request a concise optimisation summary for the provided utility slice.
+    
+    Args:
+        label: Utility type label ('total', 'Power', 'Gas', 'Water')
+        context: Data context for analysis
+        fallback: Fallback text if LLM fails
+        goals: List of sustainability goals dicts with 'title', 'description', 'target_date'
+        use_dashboard_format: If True, use 3-section format (Key Trends, Cost Efficiency, Actionable Recommendations).
+                             If False, use goal-focused bullet list format.
+    """
 
     label_name = 'Total portfolio' if label == 'total' else f"{label} usage"
-    prompt = (
-        f"Analyze the {label_name} data and forecast provided in the context.\n\n"
-        "Provide 3-5 specific insights in this format:\n"
-        "1. **Key Trend**: [Describe the most significant pattern with exact numbers and percent changes]\n"
-        "2. **Cost Efficiency**: [Calculate and report cost per unit trends, identify optimization opportunities]\n"
-        "3. **Forecast Analysis**: [Interpret the forecast - expected changes, risks, seasonal factors]\n"
-        "4. **Actionable Recommendation**: [Specific action with estimated cost/carbon impact]\n"
-        "5. **Sustainability Note**: [Environmental impact or efficiency improvement opportunity]\n\n"
-        "MUST include: exact dollar amounts, consumption values, dates, and percent changes from the data."
-    )
+    
+    # Build goals context if provided
+    goals_section = ""
+    if goals and len(goals) > 0:
+        logger.info(f"Generating recommendations with {len(goals)} sustainability goals for {label_name}")
+        goals_list = []
+        for g in goals:
+            goal_str = f"  • {g['title']}: {g['description']}"
+            if g.get('target_date'):
+                goal_str += f" (Target Date: {g['target_date']})"
+            goals_list.append(goal_str)
+        goals_section = (
+            "\n\nCOMPANY SUSTAINABILITY GOALS:\n"
+            + "\n".join(goals_list) + "\n"
+        )
+    else:
+        logger.info(f"Generating recommendations without sustainability goals for {label_name}")
+    
+    if use_dashboard_format:
+        # Dashboard format: Key Trends, Cost Efficiency, Actionable Recommendations
+        prompt = (
+            f"You are an intelligent **energy and sustainability analyst** for a mid-sized tech company in Duluth, GA. "
+            f"You are analyzing {label_name} data from the billing and consumption records (2015–2024)."
+            + goals_section + "\n\n"
+            "CRITICAL: Structure your response with EXACTLY these three section headers:\n\n"
+            "Key Trend:\n"
+            f"• Write 2-3 clear bullet points about {label_name} patterns\n"
+            "• Start with the main finding and include exact numbers\n"
+            "• Example: 'Power consumption increased 15.2% from Jan 2023 (12,450 kWh) to Jan 2024 (14,343 kWh)'\n"
+            "• Include year-over-year changes with specific dates and percentages\n"
+            "• Mention seasonal patterns or anomalies if present\n"
+            "• Reference the forecast: what's expected in the next 3-6 months\n\n"
+            "Cost Efficiency:\n"
+            f"• Write 2-3 clear bullet points analyzing {label_name} cost efficiency\n"
+            "• Calculate cost per unit with actual numbers (e.g., '$0.12 per kWh')\n"
+            "• Compare current cost per unit to previous period (e.g., 'up 8% from $0.11 in 2023')\n"
+            "• Identify inefficiencies with quantified impact (e.g., 'Off-peak usage could save $2,400/year')\n"
+            "• Use ONLY positive cost values (no negative $/unit)\n\n"
+            "Actionable Recommendation:\n"
+            f"• Write 2-3 specific, implementable actions for {label_name}\n"
+            "• State a clear action (e.g., 'Install LED lighting in Building A')\n"
+            "• Quantify savings (e.g., 'Estimated savings: $3,600/year')\n"
+            "• Specify difficulty and timeframe (e.g., 'Low cost, 2-month implementation')\n"
+            "• Include carbon impact if applicable (e.g., 'Reduce emissions by 5.2 tons CO2/year')\n\n"
+            "FORMATTING RULES:\n"
+            "1. Use section headers EXACTLY as shown: 'Key Trend:', 'Cost Efficiency:', 'Actionable Recommendation:'\n"
+            "2. Write each insight as a complete sentence\n"
+            "3. Use bullet points (• or -) for each insight\n"
+            "4. Include specific numbers with units in EVERY bullet point\n"
+            "5. Keep each bullet to 1-2 sentences maximum\n"
+            "6. NO negative costs or prices\n"
+            "7. Avoid nested sections, sub-headers, or complex formatting\n"
+        )
+    else:
+        # Sustainability format: Goal-focused bullet list
+        num_goals = len(goals) if goals else 0
+        min_goal_recommendations = max(2, num_goals) if goals else 0  # At least 2 recommendations per goal, or 25% of total
+        
+        preamble = (
+            f"You are an intelligent **energy and sustainability analyst** for a mid-sized tech company in Duluth, GA. "
+            f"You are analyzing {label_name} data from the billing and consumption records (2015–2024) across power, gas, and water utilities. "
+            "Your goal is to provide **actionable sustainability recommendations** that improve both **financial efficiency** "
+            "and **environmental sustainability**."
+            + goals_section + "\n\n"
+            "CRITICAL REQUIREMENTS:\n"
+            + (f"- Generate 8 total recommendations\n" if goals else "- Generate 5-8 recommendations\n")
+            + (f"- AT LEAST {min_goal_recommendations} recommendations (25% minimum) MUST explicitly reference and support the sustainability goals listed above\n" if goals else "")
+            + (f"- The remaining recommendations can address general efficiency, cost savings, or environmental improvements\n" if goals else "")
+            + "- ALWAYS cite specific numbers from the data (exact costs, consumption values, dates, percent changes)\n"
+            "- Calculate and report potential savings with exact dollar amounts (e.g., '$1,234.56/year')\n"
+            "- Quantify environmental impact (carbon reduction, efficiency gains) where applicable\n"
+            "- Provide specific implementation steps with difficulty level and timeframe\n"
+            + ("\n" if goals else "")
+            + ("FOR GOAL-ALIGNED RECOMMENDATIONS:\n" if goals else "")
+            + ("- Start with 'To achieve [Goal Name]...' or 'Supporting [Goal Name]...'\n" if goals else "")
+            + ("- Show measurable progress toward goal targets with percentages (e.g., 'achieves 60% of your 20% reduction goal')\n" if goals else "")
+            + ("- Align implementation timelines with goal target dates\n" if goals else "")
+            + ("\n" if goals else "")
+            + ("FOR GENERAL RECOMMENDATIONS:\n" if goals else "")
+            + ("- Focus on cost efficiency, waste reduction, or environmental impact\n" if goals else "")
+            + ("- Provide concrete actions with quantified benefits\n" if goals else "")
+            + "\n"
+            "RESPONSE FORMAT:\n"
+            "- Provide exactly 8 bullet points (or 5-8 if no goals), each containing one actionable recommendation\n"
+            "- Use exact figures, not approximations (e.g., '$1,234.56' not 'about $1,200')\n"
+            "- Keep each bullet to 2-3 sentences maximum\n"
+            "- Include: action, " + ("goal alignment (for goal-related ones), " if goals else "") + "cost/environmental impact, and timeline\n"
+            "- Output ONLY the bulleted recommendations with NO headers, explanations, or extra text\n"
+        )
+        prompt = f"{preamble}\nBased on the data context provided, generate sustainability recommendations:"
 
     if not context:
         return fallback
 
     try:
-        summary = ask_llm(context, prompt)
+        # Use recommendations model for sustainability insights
+        summary = ask_llm(context, prompt, model_name='recommendations')
         if not summary or summary.strip().lower().startswith('(llm unavailable)'):
             return fallback
         return summary
@@ -589,13 +737,15 @@ def _summarize_usage_with_llm(label, context, fallback):
         return fallback
 
 
-def forecast_trend_with_breakdown(bills_df, periods=12, include_summaries=False):
+def forecast_trend_with_breakdown(bills_df, periods=12, include_summaries=False, goals=None, use_dashboard_format=False):
     """Forecast totals alongside per-utility breakdowns and AI summaries.
     
     Args:
         bills_df: DataFrame with bill data
         periods: Number of periods to forecast
         include_summaries: If True, generate LLM summaries (slow). If False, use fallback summaries.
+        goals: List of sustainability goal dicts to incorporate into recommendations
+        use_dashboard_format: If True, use Dashboard 3-section format. If False, use goal-focused format.
     """
 
     total_forecast = forecast_trend(bills_df, periods=periods)
@@ -614,7 +764,7 @@ def forecast_trend_with_breakdown(bills_df, periods=12, include_summaries=False)
     summaries = {}
     context, fallback = _build_usage_context(bills_df, total_forecast, 'total')
     if include_summaries:
-        summaries['total'] = _summarize_usage_with_llm('total', context, fallback)
+        summaries['total'] = _summarize_usage_with_llm('total', context, fallback, goals=goals, use_dashboard_format=use_dashboard_format)
     else:
         summaries['total'] = fallback
 
@@ -626,7 +776,7 @@ def forecast_trend_with_breakdown(bills_df, periods=12, include_summaries=False)
         subset = bills_df[bills_df['bill_type'] == bill_type]
         context, fallback = _build_usage_context(subset, entry, bill_type)
         if include_summaries:
-            summaries[bill_type] = _summarize_usage_with_llm(bill_type, context, fallback)
+            summaries[bill_type] = _summarize_usage_with_llm(bill_type, context, fallback, goals=goals, use_dashboard_format=use_dashboard_format)
         else:
             summaries[bill_type] = fallback
 
@@ -669,25 +819,31 @@ def ensure_resources():
 
 
 def run_query(question: str):
+    """Run general data analysis query using insights model."""
     ensure_resources()
     ctx = "\n".join(retrieve(question, model, df, index, k=10)) if df is not None and index is not None and model is not None else ""
-    ans = ask_llm(ctx, question)
+    # Use insights model for general data queries
+    ans = ask_llm(ctx, question, model_name='insights')
     return ans
 
 
-def run_forecast(periods=12, include_summaries=False):
+def run_forecast(periods=12, include_summaries=False, goals=None, use_dashboard_format=False):
     """Run forecast with optional LLM summaries.
     
     Args:
         periods: Number of periods to forecast
         include_summaries: If True, generate LLM summaries (slow, ~2-3 minutes).
                           If False, use fast fallback summaries.
+        goals: Optional list of sustainability goal dicts to incorporate into recommendations.
+               Each goal should have 'title', 'description', and optionally 'target_date'.
+        use_dashboard_format: If True, use Dashboard format (Key Trends, Cost Efficiency, Actionable Recommendations).
+                             If False, use Sustainability format (goal-focused bullet list).
     """
     ensure_resources()
     if raw_df is None:
         return {'error': 'Data not available'}
     try:
-        forecast = forecast_trend_with_breakdown(raw_df, periods=periods, include_summaries=include_summaries)
+        forecast = forecast_trend_with_breakdown(raw_df, periods=periods, include_summaries=include_summaries, goals=goals, use_dashboard_format=use_dashboard_format)
         return forecast
     except Exception as e:
         return {'error': f'Forecasting failed: {e}'}

@@ -166,15 +166,42 @@ def forecast(request):
     import os
     default_summaries = os.environ.get('ENABLE_LLM_SUMMARIES', 'true').lower() in ('true', '1', 'yes')
     include_summaries = request.GET.get('summaries', str(default_summaries)).lower() in ('true', '1', 'yes')
+    
+    # Format parameter: 'dashboard' or 'sustainability' (default: 'dashboard')
+    # Dashboard: Key Trends, Cost Efficiency, Actionable Recommendations
+    # Sustainability: Goal-focused bullet list
+    format_param = request.GET.get('format', 'dashboard').lower()
+    use_dashboard_format = format_param == 'dashboard'
 
     try:
         from llm import rag as ragmod
     except Exception as exc:  # pragma: no cover - optional dependency
         return JsonResponse({'error': f'RAG not available in container: {exc}'}, status=503)
 
+    # Fetch sustainability goals to incorporate into recommendations
+    goals = None
+    if include_summaries:
+        goals_qs = SustainabilityGoal.objects.all()[:5]
+        if goals_qs.exists():
+            goals = []
+            for g in goals_qs:
+                goal_dict = {
+                    'title': g.title,
+                    'description': g.description,
+                    'target_date': g.target_date.strftime('%B %Y') if g.target_date else None
+                }
+                goals.append(goal_dict)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Passing {len(goals)} sustainability goals to forecast: {[g['title'] for g in goals]}")
+        else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("No sustainability goals found in database")
+
     try:
         # The LLM helper now returns total plus per-utility forecasts and summaries.
-        result = ragmod.run_forecast(periods=periods, include_summaries=include_summaries)
+        result = ragmod.run_forecast(periods=periods, include_summaries=include_summaries, goals=goals, use_dashboard_format=use_dashboard_format)
     except Exception as exc:
         return JsonResponse({'error': str(exc)}, status=500)
 
