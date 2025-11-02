@@ -1,23 +1,41 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Button,
+  Grid,
+  Stack,
+  Chip,
+  Alert,
+  Paper,
+  CircularProgress
+} from '@mui/material'
+import FlagIcon from '@mui/icons-material/Flag'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import LightbulbIcon from '@mui/icons-material/Lightbulb'
+import AddIcon from '@mui/icons-material/Add'
+import EditIcon from '@mui/icons-material/Edit'
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import GoalsManager from '../components/GoalsManager'
-import '../App.css'
 
-// Convert newline-delimited LLM responses into bullet points with enhanced formatting.
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+
 function BulletList({ text, enhanced = false }) {
-  if (!text) return <p className="empty-state">Insights will appear once data is available.</p>
+  if (!text) return (
+    <Alert severity="info" icon={<LightbulbIcon />}>
+      Insights will appear once data is available.
+    </Alert>
+  )
 
-  // Split by multiple newlines or bullet patterns to handle various AI response formats
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean)
 
   if (enhanced) {
     const items = []
     let currentSection = null
 
     lines.forEach((line, idx) => {
-      // Remove common bullet markers and numbering
       const cleanLine = line
         .replace(/^[•\-*►▸▹◦⦿⦾]\s*/, '')
         .replace(/^\d+[\.)]\s*/, '')
@@ -26,7 +44,6 @@ function BulletList({ text, enhanced = false }) {
 
       if (!cleanLine) return
 
-      // Detect headings: short lines ending with colon, bold markers, or all caps phrases
       const isHeading = 
         cleanLine.endsWith(':') || 
         (cleanLine.length < 60 && /^[A-Z\s]+$/.test(cleanLine)) ||
@@ -35,13 +52,8 @@ function BulletList({ text, enhanced = false }) {
 
       if (isHeading) {
         currentSection = cleanLine.replace(/[:*]/g, '').trim()
-        items.push({
-          type: 'heading',
-          text: currentSection,
-          key: `heading-${idx}`
-        })
+        items.push({ type: 'heading', text: currentSection, key: `heading-${idx}` })
       } else {
-        // Split long paragraphs into sentences for better readability
         const sentences = cleanLine.split(/(?<=[.!?])\s+(?=[A-Z])/)
         sentences.forEach((sentence, sIdx) => {
           const trimmedSentence = sentence.trim()
@@ -58,163 +70,255 @@ function BulletList({ text, enhanced = false }) {
     })
 
     return (
-      <div className="recommendations-enhanced">
+      <Stack spacing={2}>
         {items.map((item) => {
           if (item.type === 'heading') {
             return (
-              <div key={item.key} className="recommendation-section">
-                <div className="recommendation-heading">
-                  <span className="heading-icon">💡</span>
-                  <h4>{item.text}</h4>
-                </div>
-              </div>
+              <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+                <LightbulbIcon sx={{ color: 'warning.main' }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  {item.text}
+                </Typography>
+              </Box>
             )
           }
           
           return (
-            <div key={item.key} className="recommendation-item">
-              <span className="recommendation-icon">✓</span>
-              <div className="recommendation-content">
-                <p className="recommendation-text">{item.text}</p>
-              </div>
-            </div>
+            <Box key={item.key} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+              <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
+              <Typography variant="body1" sx={{ flex: 1 }}>
+                {item.text}
+              </Typography>
+            </Box>
           )
         })}
-      </div>
+      </Stack>
     )
   }
 
   return (
-    <ul className="recommendations">
+    <Stack spacing={1.5} component="ul" sx={{ listStyle: 'none', pl: 0 }}>
       {lines.map((line, idx) => (
-        <li key={idx}>{line.replace(/^[•\-*]\s*/, '').replace(/^\d+[\.)]\s*/, '')}</li>
+        <Box key={idx} component="li" sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+          <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
+          <Typography variant="body1">
+            {line.replace(/^[•\-*]\s*/, '').replace(/^\d+[\.)]\s*/, '')}
+          </Typography>
+        </Box>
       ))}
-    </ul>
+    </Stack>
   )
 }
 
-function Sustainability({ goals, recommendations, recommendationSources, recommendationWarning, loading, onGoalsChange }) {
+function Sustainability() {
+  const [goals, setGoals] = useState([])
+  const [recommendations, setRecommendations] = useState('')
+  const [recommendationWarning, setRecommendationWarning] = useState('')
+  const [loading, setLoading] = useState({ goals: true, recommendations: true })
   const [showGoalsManager, setShowGoalsManager] = useState(false)
 
-  return (
-    <div className="page-shell">
-      <header className="page-header">
-        <div>
-          <h1>Sustainability Goals & AI Recommendations</h1>
-          <p>Set custom goals and receive AI-powered sustainability guidance based on your energy data.</p>
-        </div>
-        <div className="header-actions">
-          <button 
-            className="primary" 
-            onClick={() => setShowGoalsManager(true)}
-          >
-            {goals.length > 0 ? '✏️ Manage Goals' : '🎯 Set Your First Goal'}
-          </button>
-        </div>
-      </header>
+  useEffect(() => {
+    fetchGoals()
+    fetchRecommendations()
+  }, [])
 
-      {/* Goals Section */}
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-header-row">
-            <div>
-              <h2>Your Sustainability Goals</h2>
-              <p>
+  const fetchGoals = async () => {
+    setLoading(prev => ({ ...prev, goals: true }))
+    try {
+      const response = await fetch(`${API_BASE}/api/goals/`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to load goals')
+      const normalizedGoals = Array.isArray(data.results)
+        ? data.results
+        : Array.isArray(data.goals)
+          ? data.goals
+          : []
+      setGoals(normalizedGoals)
+    } catch (err) {
+      console.error('Failed to fetch goals:', err)
+      setGoals([])
+    } finally {
+      setLoading(prev => ({ ...prev, goals: false }))
+    }
+  }
+
+  const fetchRecommendations = async () => {
+    setLoading(prev => ({ ...prev, recommendations: true }))
+    setRecommendationWarning('')
+    try {
+      const response = await fetch(`${API_BASE}/api/recommendations/`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || data.warning || 'Failed to load recommendations')
+      setRecommendations(data.recommendations || '')
+      if (data.warning) setRecommendationWarning(data.warning)
+    } catch (err) {
+      setRecommendations('')
+      setRecommendationWarning(err.message)
+    } finally {
+      setLoading(prev => ({ ...prev, recommendations: false }))
+    }
+  }
+
+  const handleGoalsChange = () => {
+    fetchGoals()
+    fetchRecommendations()
+  }
+
+  return (
+    <Box>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h3" sx={{ mb: 1 }}>
+          Sustainability Goals & AI Recommendations
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Set custom goals and receive AI-powered sustainability guidance based on your energy data.
+        </Typography>
+      </Box>
+
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <FlagIcon color="primary" />
+                <Typography variant="h5">
+                  Your Sustainability Goals
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
                 {goals.length > 0 
                   ? `You have ${goals.length} active goal${goals.length !== 1 ? 's' : ''} tracking your sustainability progress.`
                   : 'Set up to 5 custom sustainability goals to guide your AI recommendations.'}
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        {loading.goals ? (
-          <div className="goals-manager-loading">Loading goals...</div>
-        ) : goals.length > 0 ? (
-          <div className="goals-display">
-            {goals.map((goal) => (
-              <div key={goal.id} className="goal-card">
-                <div className="goal-header">
-                  <h3>{goal.title}</h3>
-                  {goal.target_date && (
-                    <span className="goal-deadline">
-                      📅 {new Date(goal.target_date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </span>
-                  )}
-                </div>
-                <p className="goal-description">{goal.description}</p>
-                <div className="goal-meta">
-                  <span className="goal-created">Created {new Date(goal.created_at).toLocaleDateString()}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state-large">
-            <div className="empty-state-icon">🎯</div>
-            <h3>No Goals Set Yet</h3>
-            <p>Create your first sustainability goal to get personalized AI recommendations aligned with your objectives.</p>
-            <button 
-              className="primary" 
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={goals.length > 0 ? <EditIcon /> : <AddIcon />}
               onClick={() => setShowGoalsManager(true)}
-              style={{ marginTop: '20px' }}
             >
-              Create Your First Goal
-            </button>
-          </div>
-        )}
-      </section>
+              {goals.length > 0 ? 'Manage Goals' : 'Set Your First Goal'}
+            </Button>
+          </Box>
+          
+          {loading.goals ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : goals.length > 0 ? (
+            <Grid container spacing={2}>
+              {goals.map((goal) => (
+                <Grid item xs={12} md={6} key={goal.id}>
+                  <Paper 
+                    elevation={0}
+                    sx={{ 
+                      p: 2.5, 
+                      border: '2px solid',
+                      borderColor: 'primary.light',
+                      borderRadius: 2,
+                      height: '100%',
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        transform: 'translateY(-2px)'
+                      }
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ mb: 1 }}>
+                      {goal.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      {goal.description}
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap">
+                      {goal.target_date && (
+                        <Chip
+                          icon={<CalendarTodayIcon />}
+                          label={new Date(goal.target_date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      )}
+                      <Chip 
+                        label={`Created ${new Date(goal.created_at).toLocaleDateString()}`}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Stack>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Paper 
+              elevation={0}
+              sx={{ 
+                p: 4, 
+                textAlign: 'center',
+                backgroundColor: 'rgba(37, 99, 235, 0.04)',
+                borderRadius: 2
+              }}
+            >
+              <FlagIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                No Goals Set Yet
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Create your first sustainability goal to get personalized AI recommendations aligned with your objectives.
+              </Typography>
+              <Button 
+                variant="contained" 
+                startIcon={<AddIcon />}
+                onClick={() => setShowGoalsManager(true)}
+              >
+                Create Your First Goal
+              </Button>
+            </Paper>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* AI Recommendations Section */}
-      <section className="panel">
-        <div className="panel-header">
-          <div className="panel-header-row">
-            <div>
-              <h2>AI Sustainability Recommendations</h2>
-              <p>Generated from contextual RAG pipeline using live database records.</p>
-            </div>
-          </div>
-        </div>
-        
-        {recommendationSources && (
-          <div className="recommendation-sources">
-            <div className="source-badge">
-              <strong>AI Model:</strong> {recommendationSources.model}
-            </div>
-            {recommendationSources.data_range?.start_date && (
-              <div className="source-badge">
-                <strong>Data Analyzed:</strong> {new Date(recommendationSources.data_range.start_date).toLocaleDateString()} - {new Date(recommendationSources.data_range.end_date).toLocaleDateString()} ({recommendationSources.data_range.total_bills} bills)
-              </div>
-            )}
-            <div className="source-badge">
-              <strong>Goals Analyzed:</strong> {goals.length}
-            </div>
-            <div className="source-badge">
-              <strong>RAG Pipeline:</strong> {recommendationSources.rag_enabled ? '✓ Enabled' : '✗ Disabled'}
-            </div>
-          </div>
-        )}
-        
-        {recommendationWarning && <div className="warning-banner">{recommendationWarning}</div>}
-        
-        {loading.recommendations ? (
-          <div className="goals-manager-loading">Generating AI recommendations...</div>
-        ) : (
-          <BulletList text={recommendations} enhanced={true} />
-        )}
-      </section>
+      <Card>
+        <CardContent>
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <LightbulbIcon sx={{ color: 'warning.main' }} />
+              <Typography variant="h5">
+                AI Sustainability Recommendations
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              Generated from contextual RAG pipeline using live database records.
+            </Typography>
+          </Box>
+          
+          {recommendationWarning && (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              {recommendationWarning}
+            </Alert>
+          )}
+          
+          {loading.recommendations ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <BulletList text={recommendations} enhanced={true} />
+          )}
+        </CardContent>
+      </Card>
 
       {showGoalsManager && (
         <GoalsManager onClose={() => {
           setShowGoalsManager(false)
-          if (onGoalsChange) onGoalsChange()
+          handleGoalsChange()
         }} />
       )}
-    </div>
+    </Box>
   )
 }
 

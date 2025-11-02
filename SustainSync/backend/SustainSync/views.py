@@ -7,8 +7,9 @@ import json
 from decimal import Decimal, InvalidOperation
 from io import TextIOWrapper
 
-from django.db.models import Avg, Sum
-from django.db.models.functions import TruncMonth
+from django.db.models import Avg, Sum, F
+from django.db.models.expressions import OrderBy
+from django.db.models.functions import TruncMonth, Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -422,6 +423,172 @@ def _parse_date(value: str | None, field_name: str):
     if parsed is None:
         raise ValueError(f"Field '{field_name}' must be an ISO date (YYYY-MM-DD)")
     return parsed
+
+
+@require_http_methods(["GET"])
+def list_bills(request):
+    """List and filter bills with pagination for the tables view."""
+    try:
+        bill_type = request.GET.get('bill_type')
+        page = int(request.GET.get('page', '1'))
+        page_size = int(request.GET.get('page_size', '20'))
+        sort_by = request.GET.get('sort_by', 'bill_date')
+        sort_direction = request.GET.get('sort_direction', 'desc').lower()
+
+        descending = sort_direction != 'asc'
+
+        ordering_map = {
+            'bill_date': [F('bill_date')],
+            'timestamp_upload': [F('timestamp_upload')],
+            'consumption': [F('consumption')],
+            'cost': [F('cost')],
+            'provider': [F('provider'), F('bill_date')],
+            'service_period': [
+                Coalesce(F('service_start'), F('service_end'), F('bill_date')),
+                Coalesce(F('service_end'), F('service_start'), F('bill_date')),
+            ],
+            'location': [F('city'), F('state'), F('zip'), F('bill_date')],
+        }
+
+        ordering_expressions = ordering_map.get(sort_by, ordering_map['bill_date'])
+        order_by = [
+            OrderBy(expr, descending=descending, nulls_last=True)
+            for expr in ordering_expressions
+        ]
+        # Always add bill_id as a deterministic tie-breaker.
+        order_by.append(OrderBy(F('bill_id'), descending=descending))
+
+        # clamp pagination values
+        page = max(1, page)
+        page_size = max(1, min(100, page_size))
+
+        queryset = Bill.objects.all()
+        if bill_type:
+            queryset = queryset.filter(bill_type=bill_type)
+
+        queryset = queryset.order_by(*order_by)
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+        if total_pages > 0 and page > total_pages:
+            page = total_pages
+
+        start = (page - 1) * page_size
+        end = start + page_size
+        bills = queryset[start:end]
+
+        results = [
+            {
+                'bill_id': bill.bill_id,
+                'bill_type': bill.bill_type,
+                'bill_date': bill.bill_date.isoformat() if bill.bill_date else None,
+                'service_start': bill.service_start.isoformat() if bill.service_start else None,
+                'service_end': bill.service_end.isoformat() if bill.service_end else None,
+                'service_period': (
+                    f"{bill.service_start.isoformat() if bill.service_start else ''} - "
+                    f"{bill.service_end.isoformat() if bill.service_end else ''}"
+                ),
+                'units_of_measure': bill.units_of_measure,
+                'consumption': _to_float(bill.consumption),
+                'cost': _to_float(bill.cost),
+                'provider': bill.provider,
+                'city': bill.city,
+                'state': bill.state,
+                'zip': bill.zip,
+                'timestamp_upload': bill.timestamp_upload.isoformat() if bill.timestamp_upload else None,
+            }
+            for bill in bills
+        ]
+
+        return JsonResponse({
+            'results': results,
+            'count': total_count,
+            'total_pages': total_pages,
+            'page': page,
+            'page_size': page_size,
+            'sort_by': sort_by,
+            'sort_direction': 'asc' if not descending else 'desc',
+        })
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["PATCH"])
+def update_bill(request, bill_id):
+    """Update a single bill record."""
+    try:
+        bill = Bill.objects.get(bill_id=bill_id)
+    except Bill.DoesNotExist:
+        return JsonResponse({'error': 'Bill not found'}, status=404)
+
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+
+    allowed_types = {choice[0] for choice in Bill.BILL_TYPE_CHOICES}
+    allowed_units = {choice[0] for choice in Bill.UNITS_OF_MEASURE_CHOICES}
+
+    try:
+        if 'bill_type' in payload:
+            bill_type = payload['bill_type'].strip()
+            if bill_type not in allowed_types:
+                raise ValueError(f"bill_type must be one of: {', '.join(sorted(allowed_types))}")
+            bill.bill_type = bill_type
+
+        if 'bill_date' in payload:
+            bill.bill_date = _parse_date(payload['bill_date'], 'bill_date')
+
+        if 'service_start' in payload:
+            bill.service_start = _parse_date(payload['service_start'], 'service_start')
+
+        if 'service_end' in payload:
+            bill.service_end = _parse_date(payload['service_end'], 'service_end')
+
+        if 'units_of_measure' in payload:
+            units = payload['units_of_measure'].strip() if payload['units_of_measure'] else None
+            if units and units not in allowed_units:
+                raise ValueError(f"units_of_measure must be one of: {', '.join(sorted(allowed_units))}")
+            bill.units_of_measure = units
+
+        if 'consumption' in payload:
+            bill.consumption = _parse_decimal(str(payload['consumption']), 'consumption')
+
+        if 'cost' in payload:
+            bill.cost = _parse_decimal(str(payload['cost']), 'cost')
+
+        if 'provider' in payload:
+            bill.provider = payload['provider'] or None
+
+        if 'city' in payload:
+            bill.city = payload['city'] or None
+
+        if 'state' in payload:
+            state = payload['state']
+            bill.state = state.upper() if state else None
+
+        if 'zip' in payload:
+            bill.zip = payload['zip'] or None
+
+        bill.save()
+
+        return JsonResponse({
+            'bill_id': bill.bill_id,
+            'bill_type': bill.bill_type,
+            'bill_date': bill.bill_date.isoformat() if bill.bill_date else None,
+            'service_start': bill.service_start.isoformat() if bill.service_start else None,
+            'service_end': bill.service_end.isoformat() if bill.service_end else None,
+            'units_of_measure': bill.units_of_measure,
+            'consumption': _to_float(bill.consumption),
+            'cost': _to_float(bill.cost),
+            'provider': bill.provider,
+            'city': bill.city,
+            'state': bill.state,
+            'zip': bill.zip,
+        })
+    except Exception as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
 
 
 @csrf_exempt

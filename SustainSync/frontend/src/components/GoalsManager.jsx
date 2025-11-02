@@ -1,15 +1,38 @@
 import { useState, useEffect } from 'react'
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  Stack,
+  Box,
+  Typography,
+  IconButton,
+  Alert,
+  CircularProgress,
+  Card,
+  CardContent,
+  CardActions,
+} from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import DeleteIcon from '@mui/icons-material/Delete'
+import EditIcon from '@mui/icons-material/Edit'
+import AddIcon from '@mui/icons-material/Add'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-export default function GoalsManager({ onClose }) {
+function GoalsManager({ onClose }) {
   const [goals, setGoals] = useState([])
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState(null)
+  const [error, setError] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingGoal, setEditingGoal] = useState(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    target_date: ''
+    target_date: '',
   })
 
   useEffect(() => {
@@ -17,159 +40,245 @@ export default function GoalsManager({ onClose }) {
   }, [])
 
   const fetchGoals = async () => {
+    setLoading(true)
+    setError('')
     try {
-      console.log('Fetching goals from:', `${API_BASE}/api/goals/`)
       const response = await fetch(`${API_BASE}/api/goals/`)
-      console.log('Goals response status:', response.status)
       const data = await response.json()
-      console.log('Goals data received:', data)
-      setGoals(data.goals || [])
-    } catch (error) {
-      console.error('Failed to fetch goals:', error)
+      if (!response.ok) throw new Error(data.error || 'Failed to load goals')
+      const normalizedGoals = Array.isArray(data.results)
+        ? data.results
+        : Array.isArray(data.goals)
+          ? data.goals
+          : []
+      setGoals(normalizedGoals)
+    } catch (err) {
+      setError(err.message)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleCreate = () => {
+    if (goals.length >= 5) {
+      setError('Maximum of 5 goals allowed')
+      return
+    }
+    setIsEditing(true)
+    setEditingGoal(null)
+    setFormData({ title: '', description: '', target_date: '' })
+  }
+
+  const handleEdit = (goal) => {
+    setIsEditing(true)
+    setEditingGoal(goal)
+    setFormData({
+      title: goal.title,
+      description: goal.description,
+      target_date: goal.target_date || '',
+    })
+  }
+
+  const handleDelete = async (goalId) => {
+    if (!confirm('Are you sure you want to delete this goal?')) return
     
-    if (goals.length >= 5 && !editing) {
-      alert('Maximum of 5 goals allowed. Please delete an existing goal first.')
+    try {
+      const response = await fetch(`${API_BASE}/api/goals/`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: goalId }),
+      })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete goal')
+      }
+      await fetchGoals()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleSave = async () => {
+    setError('')
+    
+    if (!formData.title.trim()) {
+      setError('Title is required')
+      return
+    }
+    if (!formData.description.trim()) {
+      setError('Description is required')
       return
     }
 
     try {
-      const method = editing ? 'PUT' : 'POST'
-      const payload = editing ? { ...formData, id: editing } : formData
-      
+      const method = editingGoal ? 'PUT' : 'POST'
+      const payload = editingGoal
+        ? { ...formData, id: editingGoal.id }
+        : formData
       const response = await fetch(`${API_BASE}/api/goals/`, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
-      
-      if (response.ok) {
-        await fetchGoals()
-        resetForm()
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to save goal')
       }
-    } catch (error) {
-      console.error('Failed to save goal:', error)
-    }
-  }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this goal?')) return
-    
-    try {
-      await fetch(`${API_BASE}/api/goals/`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id })
-      })
       await fetchGoals()
-    } catch (error) {
-      console.error('Failed to delete goal:', error)
+      setIsEditing(false)
+      setEditingGoal(null)
+      setFormData({ title: '', description: '', target_date: '' })
+    } catch (err) {
+      setError(err.message)
     }
   }
 
-  const handleEdit = (goal) => {
-    setEditing(goal.id)
-    setFormData({
-      title: goal.title,
-      description: goal.description,
-      target_date: goal.target_date || ''
-    })
+  const handleCancel = () => {
+    setIsEditing(false)
+    setEditingGoal(null)
+    setFormData({ title: '', description: '', target_date: '' })
+    setError('')
   }
-
-  const resetForm = () => {
-    setEditing(null)
-    setFormData({
-      title: '',
-      description: '',
-      target_date: ''
-    })
-  }
-
-  if (loading) return <div className="goals-manager-loading">Loading goals...</div>
 
   return (
-    <div className="goals-manager-overlay" onClick={onClose}>
-      <div className="goals-manager" onClick={(e) => e.stopPropagation()}>
-        <div className="goals-header">
-          <h2>🎯 Sustainability Goals</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
-        </div>
+    <Dialog open={true} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            Manage Sustainability Goals
+          </Typography>
+          <IconButton onClick={onClose} edge="end">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+      </DialogTitle>
 
-        <div className="goals-info">
-          <span className="goals-count">{goals.length}/5 Goals</span>
-          <p>AI will automatically analyze all goals and track your progress</p>
-        </div>
+      <DialogContent dividers>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+            {error}
+          </Alert>
+        )}
 
-        <form className="goal-form" onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="Goal title (e.g., Reduce power consumption by 20%)"
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            required
-            maxLength={200}
-          />
-          
-          <textarea
-            placeholder="Detailed description of your sustainability goal..."
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            required
-            rows={3}
-          />
-
-          <input
-            type="date"
-            placeholder="Target date (optional)"
-            value={formData.target_date}
-            onChange={(e) => setFormData({ ...formData, target_date: e.target.value })}
-          />
-
-          <div className="form-actions">
-            <button type="submit" className="btn-primary">
-              {editing ? 'Update Goal' : 'Add Goal'}
-            </button>
-            {editing && (
-              <button type="button" className="btn-secondary" onClick={resetForm}>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : isEditing ? (
+          <Stack spacing={3}>
+            <Typography variant="body2" color="text.secondary">
+              {editingGoal ? 'Edit your sustainability goal' : 'Create a new sustainability goal (max 5 total)'}
+            </Typography>
+            <TextField
+              label="Goal Title"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              fullWidth
+              required
+              placeholder="e.g., Reduce energy consumption by 20%"
+            />
+            <TextField
+              label="Description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              fullWidth
+              required
+              multiline
+              rows={4}
+              placeholder="Describe what you want to achieve and how..."
+            />
+            <TextField
+              label="Target Date (Optional)"
+              type="date"
+              value={formData.target_date}
+              onChange={(e) => setFormData({ ...formData, target_date: e.target.value })}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+            />
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+              <Button onClick={handleCancel} variant="outlined">
                 Cancel
-              </button>
-            )}
-          </div>
-        </form>
+              </Button>
+              <Button onClick={handleSave} variant="contained">
+                {editingGoal ? 'Save Changes' : 'Create Goal'}
+              </Button>
+            </Box>
+          </Stack>
+        ) : (
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                You have {goals.length} of 5 goals
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleCreate}
+                disabled={goals.length >= 5}
+              >
+                Add New Goal
+              </Button>
+            </Box>
 
-        <div className="goals-list">
-          {goals.length === 0 ? (
-            <p className="empty-state">No goals yet. Add your first sustainability goal above!</p>
-          ) : (
-            goals.map(goal => (
-              <div key={goal.id} className="goal-item">
-                <div className="goal-content">
-                  <h3>{goal.title}</h3>
-                  <p className="goal-description">{goal.description}</p>
-                  {goal.target_date && (
-                    <div className="goal-target">
-                      Target Date: {new Date(goal.target_date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </div>
-                  )}
-                  <div className="goal-meta">
-                    <span className="goal-date">Added {new Date(goal.created_at).toLocaleDateString()}</span>
-                  </div>
-                </div>
-                <div className="goal-actions">
-                  <button onClick={() => handleEdit(goal)} className="btn-edit">Edit</button>
-                  <button onClick={() => handleDelete(goal.id)} className="btn-delete">Delete</button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
+            {goals.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="body1" color="text.secondary">
+                  No goals yet. Create your first sustainability goal to get started.
+                </Typography>
+              </Box>
+            ) : (
+              goals.map((goal) => (
+                <Card key={goal.id} variant="outlined">
+                  <CardContent>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                      {goal.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      {goal.description}
+                    </Typography>
+                    {goal.target_date && (
+                      <Typography variant="caption" color="text.secondary">
+                        Target: {new Date(goal.target_date).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </Typography>
+                    )}
+                  </CardContent>
+                  <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
+                    <Button
+                      size="small"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleEdit(goal)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      color="error"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDelete(goal.id)}
+                    >
+                      Delete
+                    </Button>
+                  </CardActions>
+                </Card>
+              ))
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+
+      <DialogActions>
+        <Button onClick={onClose} variant="outlined">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
+
+export default GoalsManager

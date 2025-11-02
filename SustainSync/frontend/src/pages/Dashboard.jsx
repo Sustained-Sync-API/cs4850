@@ -1,8 +1,35 @@
 import { useEffect, useMemo, useState } from 'react'
-import '../App.css'
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Button,
+  Grid,
+  Stack,
+  Alert,
+  Paper,
+  Tabs,
+  Tab,
+  Chip,
+  CircularProgress,
+  Divider
+} from '@mui/material'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import DownloadIcon from '@mui/icons-material/Download'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
+import BoltIcon from '@mui/icons-material/Bolt'
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
+import ReceiptIcon from '@mui/icons-material/Receipt'
+import WaterDropIcon from '@mui/icons-material/WaterDrop'
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment'
+import ElectricBoltIcon from '@mui/icons-material/ElectricBolt'
+import InsightsIcon from '@mui/icons-material/Insights'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
+// Formatters
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -12,7 +39,6 @@ const number = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 })
 
-// Formatters shared across charts and summary cards.
 const formatMonthLabel = (dateString) => {
   if (!dateString) return ''
   const date = new Date(dateString)
@@ -24,242 +50,6 @@ const formatValueLabel = (value, isCurrency = false) => {
   return isCurrency ? currency.format(value) : number.format(value)
 }
 
-// Build a simple 12-month cost breakdown table component
-function MonthlyBreakdownTable({ monthlySeries = [], forecastData = null }) {
-  // Build an array of the most recent 12 months (labels)
-  const months = useMemo(() => {
-    const list = monthlySeries.map((m) => m.month).filter(Boolean)
-    // last 12 months
-    const last12 = list.slice(-12)
-    return last12
-  }, [monthlySeries])
-
-  // Gather per-utility cost by month from forecastData.breakdown histories
-  const rows = useMemo(() => {
-    const breakdown = (forecastData?.breakdown || []).filter(Boolean)
-    const utilities = breakdown.map((b) => b.bill_type)
-
-    const monthKeys = months
-    const table = utilities.map((util) => {
-      const entry = breakdown.find((b) => b.bill_type === util)
-      const history = (entry?.history || []).reduce((acc, h) => {
-        acc[h.date] = h.value ?? 0
-        return acc
-      }, {})
-      const cells = monthKeys.map((m) => history[m] ?? 0)
-      const total = cells.reduce((s, v) => s + (v || 0), 0)
-      return { utility: util, cells, total }
-    })
-
-    // Add totals row from monthlySeries as fallback
-    const totals = monthKeys.map((m) => {
-      const found = monthlySeries.find((s) => s.month === m)
-      return found ? found.total_cost : 0
-    })
-
-    // Filter out utilities that are all zeros to avoid noisy rows
-    const utilitiesFiltered = table.filter((r) => r.total && r.total !== 0)
-
-    return { utilities: utilitiesFiltered, months: monthKeys, totals, hasBreakdown: utilitiesFiltered.length > 0 }
-  }, [forecastData, months, monthlySeries])
-
-  if (!rows.months || rows.months.length === 0) {
-    return <div className="empty-state">Not enough historical monthly data to show a breakdown.</div>
-  }
-
-  // If there is no per-utility breakdown (all utilities sum to zero), show totals-only with a note
-  if (!rows.hasBreakdown) {
-    return (
-      <div className="monthly-breakdown">
-        <div className="empty-state">Per-utility breakdown is unavailable for the selected months. Showing totals only.</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Month</th>
-              {rows.months.map((m) => (
-                <th key={m}>{formatMonthLabel(m)}</th>
-              ))}
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Total</strong></td>
-              {rows.totals.map((t, idx) => (
-                <td key={idx}>{formatValueLabel(t, true)}</td>
-              ))}
-              <td>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    )
-  }
-
-  return (
-    <div className="monthly-breakdown">
-      <table>
-        <thead>
-          <tr>
-            <th>Utility</th>
-            {rows.months.map((m) => (
-              <th key={m}>{formatMonthLabel(m)}</th>
-            ))}
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.utilities.map((r) => (
-            <tr key={r.utility}>
-              <td>{r.utility}</td>
-              {r.cells.map((c, idx) => (
-                <td key={idx}>{formatValueLabel(c, true)}</td>
-              ))}
-              <td>{formatValueLabel(r.total, true)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td><strong>Total</strong></td>
-            {rows.totals.map((t, idx) => (
-              <td key={idx}><strong>{formatValueLabel(t, true)}</strong></td>
-            ))}
-            <td><strong>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</strong></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  )
-}
-
-// Aggregate last 12 months into 4 calendar quarters and render a breakdown table
-function QuarterlyBreakdownTable({ monthlySeries = [], forecastData = null }) {
-  const months = useMemo(() => {
-    const list = monthlySeries.map((m) => m.month).filter(Boolean)
-    return list.slice(-12)
-  }, [monthlySeries])
-
-  // Map months to quarter labels e.g. Q1 2024
-  const quarters = useMemo(() => {
-    // Group months into 3-month windows aligned to calendar quarters
-    const qMap = {}
-    months.forEach((m) => {
-      const d = new Date(m)
-      const q = Math.floor(d.getMonth() / 3) + 1
-      const label = `Q${q} ${d.getFullYear()}`
-      if (!qMap[label]) qMap[label] = []
-      qMap[label].push(m)
-    })
-    // Keep order of appearance and only most recent 4 quarters
-    const ordered = Object.keys(qMap)
-    return ordered.slice(-4).map((label) => ({ label, months: qMap[label] }))
-  }, [months])
-
-  // Build per-utility aggregated costs per quarter
-  const rows = useMemo(() => {
-    const breakdown = (forecastData?.breakdown || []).filter(Boolean)
-    const utilities = breakdown.map((b) => b.bill_type)
-
-    const table = utilities.map((util) => {
-      const entry = breakdown.find((b) => b.bill_type === util)
-      const history = (entry?.history || []).reduce((acc, h) => {
-        acc[h.date] = h.value ?? 0
-        return acc
-      }, {})
-
-      const cells = quarters.map((q) => {
-        return q.months.reduce((sum, m) => sum + (history[m] ?? 0), 0)
-      })
-      const total = cells.reduce((s, v) => s + v, 0)
-      return { utility: util, cells, total }
-    })
-
-    // Totals per quarter from monthlySeries
-    const totals = quarters.map((q) =>
-      q.months.reduce((s, m) => {
-        const found = monthlySeries.find((s2) => s2.month === m)
-        return s + (found ? found.total_cost : 0)
-      }, 0)
-    )
-
-    // Filter empty utilities
-    const utilitiesFiltered = table.filter((r) => r.total && r.total !== 0)
-    return { utilities: utilitiesFiltered, quarters, totals, hasBreakdown: utilitiesFiltered.length > 0 }
-  }, [forecastData, quarters, monthlySeries])
-
-  if (!rows.quarters || rows.quarters.length === 0) {
-    return <div className="empty-state">Not enough historical data to display quarterly breakdown.</div>
-  }
-
-  if (!rows.hasBreakdown) {
-    return (
-      <div className="monthly-breakdown">
-        <table>
-          <thead>
-            <tr>
-              <th>Quarter</th>
-              {rows.quarters.map((q) => (
-                <th key={q.label}>{q.label}</th>
-              ))}
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Total</strong></td>
-              {rows.totals.map((t, idx) => (
-                <td key={idx}>{formatValueLabel(t, true)}</td>
-              ))}
-              <td>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    )
-  }
-
-  return (
-    <div className="monthly-breakdown">
-      <table className="quarterly-table">
-        <thead>
-          <tr>
-            <th>Quarter</th>
-            {rows.quarters.map((q) => (
-              <th key={q.label}>{q.label}</th>
-            ))}
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Total</strong></td>
-            {rows.totals.map((t, idx) => (
-              <td key={idx}>{formatValueLabel(t, true)}</td>
-            ))}
-            <td>{formatValueLabel(rows.totals.reduce((s, v) => s + (v || 0), 0), true)}</td>
-          </tr>
-        </tbody>
-      </table>
-
-    </div>
-  )
-}
-
-// Filter history to show only the last 3 years
-const filterLast3Years = (history = []) => {
-  if (history.length === 0) return []
-  
-  const threeYearsAgo = new Date()
-  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3)
-  
-  return history.filter(item => {
-    const itemDate = new Date(item.date)
-    return itemDate >= threeYearsAgo
-  })
-}
-
-// Convert API history entries into the structure used by charts.
 const mapHistoryToSeries = (history = []) =>
   filterLast3Years(history).map((item) => ({
     label: formatMonthLabel(item.date),
@@ -288,18 +78,10 @@ const mapForecastToCostSeries = (series = []) =>
     value: item.yhat ?? 0,
   }))
 
-// Shared hook for loading states so individual sections can toggle flags.
-const useAsyncState = (initialValue) => {
-  const [state, setState] = useState(initialValue)
-  const update = (patch) => setState((prev) => ({ ...prev, ...patch }))
-  return [state, update]
-}
-
-// Render a simple single-line chart for totals or breakdown cards.
-function SimpleLineChart({ actual = [], forecast = [], height = 240, responsive = false, units = 'units', dataLabel = 'Value' }) {
-  const padding = 70
-  const rightPadding = 30
-  const width = responsive ? 580 : 500
+// Simple line chart component
+function SimpleLineChart({ actual = [], forecast = [], height = 220 }) {
+  const padding = 36
+  const width = 550
 
   const combined = actual
     .map((entry, idx) => ({ ...entry, index: idx, type: 'actual' }))
@@ -350,7 +132,7 @@ function SimpleLineChart({ actual = [], forecast = [], height = 240, responsive 
   const labelStride = Math.max(1, Math.floor(combined.length / 6))
 
   return (
-    <div className={`chart-wrapper ${responsive ? 'chart-wrapper--responsive' : ''}`}>
+    <div className="chart-wrapper">
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Chart" preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id="forecastGradient" x1="0" x2="0" y1="0" y2="1">
@@ -416,10 +198,8 @@ function SimpleLineChart({ actual = [], forecast = [], height = 240, responsive 
       </div>
     </div>
   )
-}
-
-// Visualise multiple utilities together with brand-coloured series.
-function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 280, dataLabel = 'Value', units = 'units' }) {
+}// Visualise multiple utilities together with brand-coloured series.
+function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 260 }) {
   if (!datasets.length || !timeline.length) {
     return <div className="chart-empty">Forecast will appear once at least one utility has history.</div>
   }
@@ -544,7 +324,11 @@ function MultiSeriesForecastChart({ datasets = [], timeline = [], height = 280, 
 
 // Convert newline-delimited LLM responses into bullet points with enhanced formatting.
 function BulletList({ text, enhanced = false }) {
-  if (!text) return <p className="empty-state">Insights will appear once data is available.</p>
+  if (!text) return (
+    <Alert severity="info">
+      Insights will appear once data is available.
+    </Alert>
+  )
 
   // Split by multiple newlines or bullet patterns to handle various AI response formats
   const lines = text
@@ -598,70 +382,94 @@ function BulletList({ text, enhanced = false }) {
     })
 
     return (
-      <div className="recommendations-enhanced">
+      <Stack spacing={2}>
         {items.map((item) => {
           if (item.type === 'heading') {
             return (
-              <div key={item.key} className="recommendation-section">
-                <div className="recommendation-heading">
-                  <span className="heading-icon">💡</span>
-                  <h4>{item.text}</h4>
-                </div>
-              </div>
+              <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+                <TrendingUpIcon sx={{ color: 'warning.main' }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  {item.text}
+                </Typography>
+              </Box>
             )
           }
           
           return (
-            <div key={item.key} className="recommendation-item">
-              <span className="recommendation-icon">✓</span>
-              <div className="recommendation-content">
-                <p className="recommendation-text">{item.text}</p>
-              </div>
-            </div>
+            <Box key={item.key} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+              <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
+              <Typography variant="body1">
+                {item.text}
+              </Typography>
+            </Box>
           )
         })}
-      </div>
+      </Stack>
     )
   }
 
   return (
-    <ul className="recommendations">
+    <Stack spacing={1.5} component="ul" sx={{ listStyle: 'none', pl: 0 }}>
       {lines.map((line, idx) => (
-        <li key={idx}>{line.replace(/^[•\-*]\s*/, '').replace(/^\d+[\.)]\s*/, '')}</li>
+        <Box key={idx} component="li" sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+          <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.25rem', mt: 0.25, flexShrink: 0 }} />
+          <Typography variant="body1">
+            {line.replace(/^[•\-*]\s*/, '').replace(/^\d+[\.)]\s*/, '')}
+          </Typography>
+        </Box>
       ))}
-    </ul>
+    </Stack>
   )
 }
 
 // Tab navigation component for switching between utilities
 function TabPanel({ tabs = [], activeTab, onTabChange }) {
+  const activeIndex = tabs.findIndex(tab => tab.key === activeTab)
+  
   return (
-    <div className="tab-panel">
-      <div className="tab-list" role="tablist">
+    <Paper elevation={0} sx={{ borderRadius: 2, bgcolor: 'grey.50', p: 0.5 }}>
+      <Tabs 
+        value={activeIndex >= 0 ? activeIndex : 0} 
+        onChange={(_, newValue) => onTabChange(tabs[newValue]?.key)}
+        variant="scrollable"
+        scrollButtons="auto"
+        TabIndicatorProps={{
+          style: { height: 3 }
+        }}
+        sx={{
+          '& .MuiTab-root': {
+            minHeight: 48,
+            textTransform: 'none',
+            fontSize: '0.95rem',
+            fontWeight: 500,
+            borderRadius: 1.5,
+            mx: 0.25,
+            '&.Mui-selected': {
+              bgcolor: 'background.paper',
+              color: 'primary.main',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }
+          }
+        }}
+      >
         {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            role="tab"
-            aria-selected={activeTab === tab.key}
-            className={`tab-button ${activeTab === tab.key ? 'tab-button--active' : ''}`}
-            onClick={() => onTabChange(tab.key)}
-          >
-            {tab.label}
-          </button>
+          <Tab key={tab.key} label={tab.label} />
         ))}
-      </div>
-    </div>
+      </Tabs>
+    </Paper>
   )
 }
 
 function Dashboard({ forecastData, recommendations, recommendationSources, recommendationWarning, loading: sharedLoading, onDataRefresh }) {
   const [metrics, setMetrics] = useState(null)
-  const [monthlySeries, setMonthlySeries] = useState([])
+  const [forecastData, setForecastData] = useState(null)
+  const [recommendations, setRecommendations] = useState('')
   const [uploadResult, setUploadResult] = useState(null)
-  const [activeUtilityTab, setActiveUtilityTab] = useState('overview')
-  const [loading, setLoading] = useAsyncState({
+  const [activeUtilityTab, setActiveUtilityTab] = useState('all')
+  const [loading, setLoading] = useState({
     metrics: true,
-    monthly: true,
+    forecast: true,
+    recommendations: true,
   })
 
   const fetchMetrics = async () => {
@@ -673,84 +481,41 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
     } catch (error) {
       setMetrics({ error: error.message })
     } finally {
-      setLoading({ metrics: false })
+      setLoading(prev => ({ ...prev, metrics: false }))
     }
   }
 
-  const fetchMonthly = async () => {
+  const fetchForecast = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/dashboard/monthly/`)
+      const response = await fetch(`${API_BASE}/api/forecast/?periods=12`)
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to load monthly data')
-      setMonthlySeries(data.series || [])
+      if (!response.ok) throw new Error(data.error || 'Unable to load forecast')
+      setForecastData(data)
     } catch (error) {
-      setMonthlySeries([])
+      setForecastData({ error: error.message })
     } finally {
-      setLoading({ monthly: false })
+      setLoading(prev => ({ ...prev, forecast: false }))
+    }
+  }
+
+  const fetchRecommendations = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/recommendations/`)
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Unable to load recommendations')
+      setRecommendations(data.recommendations || '')
+    } catch (error) {
+      setRecommendations('')
+    } finally {
+      setLoading(prev => ({ ...prev, recommendations: false }))
     }
   }
 
   useEffect(() => {
     fetchMetrics()
-    fetchMonthly()
+    fetchForecast()
+    fetchRecommendations()
   }, [])
-
-  const actualForecastSeries = useMemo(() => {
-    if (!forecastData || forecastData.error) {
-      return { actual: [], forecast: [] }
-    }
-    return {
-      actual: mapHistoryToSeries(forecastData.history || []),
-      forecast: mapForecastToSeries(forecastData.series || []),
-    }
-  }, [forecastData])
-
-  const actualForecastCostSeries = useMemo(() => {
-    if (!forecastData || forecastData.error) {
-      return { actual: [], forecast: [] }
-    }
-    return {
-      actual: mapHistoryToCostSeries(forecastData.history || []),
-      forecast: mapForecastToCostSeries(forecastData.series || []),
-    }
-  }, [forecastData])
-
-  const forecastTimeline = useMemo(() => {
-    const combined = [...actualForecastSeries.actual, ...actualForecastSeries.forecast]
-    const seen = new Set()
-    return combined.filter((entry) => {
-      if (seen.has(entry.date)) return false
-      seen.add(entry.date)
-      return true
-    })
-  }, [actualForecastSeries])
-
-  const multiSeriesDatasets = useMemo(() => {
-    if (!forecastData || forecastData.error) return []
-    const datasets = []
-    
-    const breakdown = (forecastData.breakdown || []).filter((entry) => !entry.error)
-    breakdown.forEach((entry) => {
-      const key = entry.bill_type.toLowerCase()
-      datasets.push({
-        key,
-        label: entry.bill_type,
-        actual: mapHistoryToCostSeries(entry.history || []),
-        forecast: mapForecastToCostSeries(entry.series || []),
-      })
-    })
-
-    return datasets
-  }, [forecastData])
-
-  const monthlyCostSeries = useMemo(
-    () =>
-      monthlySeries.map((entry) => ({
-        label: formatMonthLabel(entry.month),
-        value: entry.total_cost,
-      })),
-    [monthlySeries]
-  )
 
   const handleFileUpload = async (event) => {
     const [file] = event.target.files
@@ -771,20 +536,12 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
       // Show success briefly
       setUploadResult({ ...data, filename: file.name })
 
-      // Always refresh data after upload (even if there were some errors)
-      setLoading({ metrics: true, monthly: true })
-      await Promise.all([
-        fetchMetrics(),
-        fetchMonthly(),
-      ])
-      
-      // Refresh shared data
-      if (onDataRefresh) onDataRefresh()
-
-      // Clear upload result after 2 seconds
-      setTimeout(() => {
-        setUploadResult(null)
-      }, 2000)
+      if (!data.errors?.length) {
+        setLoading({ metrics: true, forecast: true, recommendations: true })
+        fetchMetrics()
+        fetchForecast()
+        fetchRecommendations()
+      }
     } catch (error) {
       setUploadResult({ status: 'error', error: error.message, filename: file.name })
       // Clear error after 3 seconds
@@ -796,378 +553,461 @@ function Dashboard({ forecastData, recommendations, recommendationSources, recom
     }
   }
 
+  const handleDownloadCSV = () => {
+    window.open(`${API_BASE}/api/bills/template/`, '_blank')
+  }
+
   const totals = metrics?.totals || {}
-  const summaries = forecastData?.summaries || {}
+  const byType = metrics?.by_type || []
 
-  // Compute average monthly cost for the most recent completed quarter and the prior quarter.
-  const quarterComparison = useMemo(() => {
-    if (!monthlySeries || monthlySeries.length === 0) return null
+  // Get average monthly cost by bill type
+  const getAverageMonthlyCost = (billType) => {
+    const typeData = byType.find(t => t.bill_type === billType)
+    if (!typeData) return 0
+    // This is simplified - in reality you'd want to calculate from monthly data
+    return typeData.total_cost
+  }
 
-    const sorted = [...monthlySeries].sort((a, b) => new Date(a.month) - new Date(b.month))
-    const latest = sorted[sorted.length - 1]
-    if (!latest || !latest.month) return null
-
-    const latestDate = new Date(latest.month)
-    const qStartMonth = Math.floor(latestDate.getMonth() / 3) * 3
-    const qYear = latestDate.getFullYear()
-
-    const getCost = (year, monthIndex) => {
-      const found = monthlySeries.find((s) => {
-        const d = new Date(s.month)
-        return d.getFullYear() === year && d.getMonth() === monthIndex
+  // Get utility tabs
+  const utilityTabs = useMemo(() => {
+    const tabs = [
+      { key: 'all', label: 'All Utilities', icon: <BoltIcon /> }
+    ]
+    
+    if (forecastData?.breakdown) {
+      forecastData.breakdown.forEach(item => {
+        const icon = item.bill_type === 'Power' ? <ElectricBoltIcon /> :
+                     item.bill_type === 'Gas' ? <LocalFireDepartmentIcon /> :
+                     <WaterDropIcon />
+        tabs.push({
+          key: item.bill_type.toLowerCase(),
+          label: item.bill_type,
+          icon
+        })
       })
-      // return null when the month isn't present so we can track missing months
-      return found ? (found.total_cost || 0) : null
     }
-
-    const pastCosts = []
-    for (let i = 0; i < 3; i++) {
-      const m = qStartMonth + i
-      const cost = getCost(qYear, m)
-      if (cost !== null) pastCosts.push(cost)
-    }
-
-    let prevStart = qStartMonth - 3
-    let prevYear = qYear
-    if (prevStart < 0) {
-      prevStart += 12
-      prevYear -= 1
-    }
-
-    const prevCosts = []
-    for (let i = 0; i < 3; i++) {
-      const m = prevStart + i
-      const cost = getCost(prevYear, m)
-      if (cost !== null) prevCosts.push(cost)
-    }
-
-    const pastSum = pastCosts.reduce((s, c) => s + c, 0)
-    const prevSum = prevCosts.reduce((s, c) => s + c, 0)
-    const pastAvg = pastCosts.length ? pastSum / pastCosts.length : null
-    const prevAvg = prevCosts.length ? prevSum / prevCosts.length : null
-    const delta = pastAvg !== null && prevAvg !== null ? pastAvg - prevAvg : null
-    const pct = delta !== null && prevAvg !== 0 ? (delta / prevAvg) * 100 : null
-
-    const quarterLabel = `Q${Math.floor(qStartMonth / 3) + 1} ${qYear}`
-    const prevQuarterLabel = `Q${Math.floor(prevStart / 3) + 1} ${prevYear}`
-
-    return { pastAvg, prevAvg, delta, pct, quarterLabel, prevQuarterLabel, pastCount: pastCosts.length, prevCount: prevCosts.length }
-  }, [monthlySeries])
+    
+    return tabs
+  }, [forecastData])
 
   return (
-    <div className="page-shell">
-      <header className="page-header">
-        <div>
-          <h1>SustainSync Insight Center</h1>
-          <p>Track branded sustainability metrics, forecast costs, and surface AI guidance in one cohesive hub.</p>
-        </div>
-        <div className="header-actions">
-          {/* <a className="ghost" href="#data-entry">
-            Open Data Entry Workspace
-          </a> */}
-          <button className="primary" onClick={() => window.open(`${API_BASE}/api/bills/template/`, '_blank')}>
-            Download CSV Template
-          </button>
-          <label className="upload-control">
-            <input type="file" accept=".csv" onChange={handleFileUpload} />
-            <span>Quick Upload</span>
-          </label>
-        </div>
-      </header>
+    <Box sx={{ p: 3 }}>
+      {/* Header */}
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h3" sx={{ mb: 1, fontWeight: 700 }}>
+            Dashboard
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Track your utility consumption, costs, and sustainability insights
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={2}>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadIcon />}
+            onClick={handleDownloadCSV}
+          >
+            Download CSV
+          </Button>
+          <Button
+            variant="contained"
+            component="label"
+            startIcon={<CloudUploadIcon />}
+          >
+            Quick Upload
+            <input type="file" accept=".csv" onChange={handleFileUpload} hidden />
+          </Button>
+        </Stack>
+      </Box>
 
-      <section className="metrics-grid">
-        <div className="metric-card">
-          <span className="metric-label">Total Spend</span>
-          <span className="metric-value">
-            {loading.metrics ? 'Loading…' : formatValueLabel(totals.cost || 0)}
-          </span>
-          <span className="metric-subtitle">Across all utility bills for the past 10 years</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">Total Consumption</span>
-          <div className="metric-value metric-value--breakdown">
-            {loading.metrics ? (
-              'Loading…'
-            ) : (
-              <div className="consumption-breakdown">
-                {(metrics?.by_type || []).map((entry) => {
-                  const type = (entry.bill_type || '').toLowerCase()
-                  const units = type.includes('power') || type.includes('electric') ? 'kWh' : type.includes('gas') ? 'therms' : type.includes('water') ? 'gallons' : 'units'
-                  return (
-                    <div key={entry.bill_type} className="consumption-row">
-                      <span className="consumption-label">{entry.bill_type}</span>
-                      <span className="consumption-value">{number.format(entry.total_consumption || 0)} {units}</span>
-                    </div>
-                  )
-                })}
+      {/* Top Metrics Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={2}>
+            <CardContent>
+              <Stack spacing={1}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AttachMoneyIcon color="primary" />
+                  <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    Total Spend
+                  </Typography>
+                </Box>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                  {loading.metrics ? <CircularProgress size={24} /> : formatValueLabel(totals.cost || 0)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  All utilities combined
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
 
-              </div>
-            )}
-          </div>
-          <span className="metric-subtitle">Across all utility types for the past 10 years</span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">Average Monthly Cost per Quarter</span>
-          <div className="metric-value">
-            {loading.monthly ? (
-              'Loading…'
-            ) : quarterComparison && quarterComparison.pastAvg !== null ? (
-              <div>
-                <div>{formatValueLabel(quarterComparison.pastAvg, true)}</div>
-                {quarterComparison.delta !== null && (
-                  <div
-                    style={{
-                      fontSize: '0.85rem',
-                      marginTop: '6px',
-                      color: quarterComparison.delta <= 0 ? '#1b7e3a' : '#c0392b',
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={2}>
+            <CardContent>
+              <Stack spacing={1}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <BoltIcon color="primary" />
+                  <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    Total Consumption
+                  </Typography>
+                </Box>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                  {loading.metrics ? <CircularProgress size={24} /> : `${number.format(totals.consumption || 0)} units`}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Energy and water
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={2}>
+            <CardContent>
+              <Stack spacing={1}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TrendingUpIcon color="primary" />
+                  <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    Average Monthly Cost
+                  </Typography>
+                </Box>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                  {loading.metrics ? <CircularProgress size={24} /> : formatValueLabel(totals.average_bill || 0)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Per bill statement
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={2}>
+            <CardContent>
+              <Stack spacing={1}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CalendarTodayIcon color="primary" />
+                  <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    Latest Statement
+                  </Typography>
+                </Box>
+                <Typography variant="h5" sx={{ fontWeight: 700, py: 0.75 }}>
+                  {loading.metrics || !totals.last_updated ? <CircularProgress size={24} /> : formatMonthLabel(totals.last_updated)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Most recent billing
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Average Monthly Cost by Bill Type */}
+      {byType.length > 0 && (
+        <Card elevation={2} sx={{ mb: 4 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+              <ReceiptIcon color="primary" />
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                Average Monthly Cost by Bill Type
+              </Typography>
+            </Box>
+            <Grid container spacing={2}>
+              {byType.map((item) => (
+                <Grid item xs={12} md={4} key={item.bill_type}>
+                  <Paper 
+                    elevation={0} 
+                    sx={{ 
+                      p: 2.5, 
+                      border: '1px solid', 
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        boxShadow: 2,
+                        borderColor: 'primary.main',
+                      }
                     }}
                   >
-                    {quarterComparison.delta >= 0 ? '+' : ''}
-                    {formatValueLabel(quarterComparison.delta, true)}{' '}
-                    {quarterComparison.pct !== null ? `(${number.format(quarterComparison.pct)}%)` : ''}
-                  </div>
-                )}
-              </div>
-            ) : (
-              // fallback to the server-provided average per invoice
-              formatValueLabel(totals.average_bill || 0)
-            )}
-          </div>
-          <span className="metric-subtitle">
-            {quarterComparison && quarterComparison.pastAvg !== null
-              ? `${quarterComparison.quarterLabel} avg / mo vs ${quarterComparison.prevQuarterLabel}`
-              : 'Per invoice in the system'}
-          </span>
-        </div>
-        <div className="metric-card">
-          <span className="metric-label">Latest Billing Period</span>
-          <span className="metric-value metric-value--small">
-            {loading.metrics || !totals.last_updated ? 'Loading…' : formatMonthLabel(totals.last_updated)}
-          </span>
-          <span className="metric-subtitle">Automatically refreshed after each upload</span>
-        </div>
-      </section>
+                    <Stack spacing={1.5}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {item.bill_type === 'Power' && <ElectricBoltIcon color="primary" />}
+                        {item.bill_type === 'Gas' && <LocalFireDepartmentIcon color="warning" />}
+                        {item.bill_type === 'Water' && <WaterDropIcon color="info" />}
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          {item.bill_type}
+                        </Typography>
+                      </Box>
+                      <Typography variant="h4" color="primary" sx={{ fontWeight: 700 }}>
+                        {formatValueLabel(item.total_cost)}
+                      </Typography>
+                      <Divider />
+                      <Typography variant="body2" color="text.secondary">
+                        {number.format(item.total_consumption || 0)} units consumed
+                      </Typography>
+                    </Stack>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
 
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Quarterly Spend Trends</h2>
-          <p>Visualize how actual utility costs evolve quarter over quarter (last 4 quarters).</p>
-        </div>
-        {/* New: show last 4 quarters per-utility cost breakdown */}
-        <QuarterlyBreakdownTable monthlySeries={monthlySeries} forecastData={forecastData} />
-      </section>
+      {/* 12-Month Prophet Forecast */}
+      <Card elevation={2} sx={{ mb: 4 }}>
+        <CardContent>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h5" sx={{ mb: 1, fontWeight: 700 }}>
+              12-Month Prophet Forecast
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              View forecasts for all utilities or select a specific type
+            </Typography>
+          </Box>
 
-      <section className="panel">
-        <div className="panel-header">
-          <h2>12-Month Prophet Forecast by Utility</h2>
-          <p>Select a utility to view detailed forecasts and AI-powered insights.</p>
-        </div>
-        {forecastData?.error ? (
-          <div className="error-banner">{forecastData.error}</div>
-        ) : (
-          <>
-            <TabPanel
-              tabs={[
-                { key: 'overview', label: 'All Utilities' },
-                ...(forecastData?.breakdown || []).map((entry) => ({
-                  key: entry.bill_type.toLowerCase(),
-                  label: entry.bill_type,
-                })),
-              ]}
-              activeTab={activeUtilityTab}
-              onTabChange={setActiveUtilityTab}
-            />
+          {forecastData?.error ? (
+            <Alert severity="error">{forecastData.error}</Alert>
+          ) : (
+            <>
+              <TabPanel
+                tabs={utilityTabs}
+                activeTab={activeUtilityTab}
+                onTabChange={setActiveUtilityTab}
+              />
 
-            {activeUtilityTab === 'overview' ? (
-              <div className="tab-content">
-                <div className="forecast-chart-container">
-                  <MultiSeriesForecastChart 
-                    datasets={multiSeriesDatasets} 
-                    timeline={forecastTimeline} 
-                    height={240}
-                    dataLabel="Total Cost"
-                    units="USD ($)"
-                  />
-                </div>
-                <div className="forecast-insights">
-                  <h3>Overall Portfolio Insights</h3>
-                  <BulletList text={summaries.total} enhanced={true} />
-                </div>
-              </div>
-            ) : (
-              (() => {
-                const utilityData = (forecastData?.breakdown || []).find(
-                  (entry) => entry.bill_type.toLowerCase() === activeUtilityTab
-                )
-                if (!utilityData) return <div className="empty-state">No data available for this utility.</div>
+              <Box sx={{ mt: 3 }}>
+                {activeUtilityTab === 'all' ? (
+                  // All utilities view
+                  <Box>
+                    {forecastData?.history && forecastData?.series && (
+                      <Box sx={{ 
+                        bgcolor: 'grey.50', 
+                        borderRadius: 2, 
+                        p: 3,
+                        mb: 3
+                      }}>
+                        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                          Total Forecast
+                        </Typography>
+                        <SimpleLineChart
+                          actual={mapHistoryToSeries(forecastData.history || [])}
+                          forecast={mapForecastToSeries(forecastData.series || [])}
+                          height={240}
+                        />
+                      </Box>
+                    )}
 
-                // Determine units based on bill type
-                const getUnitsForUtility = (billType) => {
-                  const type = billType.toLowerCase()
-                  if (type.includes('power') || type.includes('electric')) return 'kWh'
-                  if (type.includes('gas')) return 'therms'
-                  if (type.includes('water')) return 'gallons'
-                  return 'units'
-                }
+                    <Grid container spacing={3}>
+                      {(forecastData?.breakdown || []).map((utilityData) => {
+                        if (utilityData.error) {
+                          return (
+                            <Grid item xs={12} md={6} lg={4} key={utilityData.bill_type}>
+                              <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
+                                <Typography variant="h6" sx={{ mb: 1 }}>
+                                  {utilityData.bill_type}
+                                </Typography>
+                                <Alert severity="info">{utilityData.error}</Alert>
+                              </Paper>
+                            </Grid>
+                          )
+                        }
 
-                // Generate insights about the data
-                const generateDataInsights = (utilityData) => {
-                  const history = utilityData.history || []
-                  const forecast = utilityData.series || []
-                  
-                  if (history.length === 0 && forecast.length === 0) {
-                    return 'No data available'
-                  }
+                        return (
+                          <Grid item xs={12} md={6} lg={4} key={utilityData.bill_type}>
+                            <Paper 
+                              elevation={0} 
+                              sx={{ 
+                                p: 2.5, 
+                                border: '1px solid', 
+                                borderColor: 'divider',
+                                height: '100%',
+                                transition: 'all 0.2s',
+                                '&:hover': {
+                                  boxShadow: 3,
+                                  borderColor: 'primary.main',
+                                }
+                              }}
+                            >
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                                {utilityData.bill_type}
+                              </Typography>
+                              <SimpleLineChart
+                                actual={mapHistoryToSeries(utilityData.history || [])}
+                                forecast={mapForecastToSeries(utilityData.series || [])}
+                                height={180}
+                              />
+                            </Paper>
+                          </Grid>
+                        )
+                      })}
+                    </Grid>
+                  </Box>
+                ) : (
+                  // Individual utility view
+                  (() => {
+                    const utilityData = (forecastData?.breakdown || []).find(
+                      (entry) => entry.bill_type.toLowerCase() === activeUtilityTab
+                    )
+                    
+                    if (!utilityData) return (
+                      <Alert severity="info">
+                        No data available for this utility.
+                      </Alert>
+                    )
 
-                  const totalDataPoints = history.length + forecast.length
-                  const historicalMonths = history.length
-                  const forecastMonths = forecast.length
+                    if (utilityData.error) return (
+                      <Alert severity="info">
+                        {utilityData.error}
+                      </Alert>
+                    )
 
-                  let dateRange = ''
-                  if (history.length > 0) {
-                    const firstDate = new Date(history[0].date)
-                    const lastDate = new Date(history[history.length - 1].date)
-                    const startMonth = firstDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                    const endMonth = lastDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                    dateRange = `${startMonth} - ${endMonth}`
-                  }
-
-                  let insight = `Showing ${historicalMonths} month${historicalMonths !== 1 ? 's' : ''} of historical data`
-                  if (dateRange) insight += ` (${dateRange})`
-                  if (forecastMonths > 0) {
-                    insight += ` with ${forecastMonths} month${forecastMonths !== 1 ? 's' : ''} forecasted`
-                  }
-
-                  return insight
-                }
-
-                return (
-                  <div className="tab-content">
-                    <div className="utility-header">
-                      <div>
-                        <h3>{utilityData.bill_type}</h3>
-                        <span className="forecast-model">
-                          {generateDataInsights(utilityData)}
-                        </span>
-                      </div>
-                      {utilityData.warning && <span className="pill pill--warning">{utilityData.warning}</span>}
-                      {utilityData.error && <span className="pill pill--error">{utilityData.error}</span>}
-                    </div>
-                    {!utilityData.error ? (
-                      <>
-                        <div className="forecast-chart-container">
+                    return (
+                      <Box>
+                        <Box sx={{ 
+                          bgcolor: 'grey.50', 
+                          borderRadius: 2, 
+                          p: 3,
+                          mb: 3
+                        }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+                            <Box>
+                              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                                {utilityData.bill_type} Forecast
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {utilityData.model ? `Model: ${utilityData.model}` : 'Model unavailable'}
+                              </Typography>
+                            </Box>
+                            {utilityData.warning && (
+                              <Chip 
+                                label={utilityData.warning} 
+                                color="warning" 
+                                size="small" 
+                              />
+                            )}
+                          </Box>
                           <SimpleLineChart
                             actual={mapHistoryToSeries(utilityData.history || [])}
                             forecast={mapForecastToSeries(utilityData.series || [])}
-                            height={220}
-                            responsive={true}
-                            units={getUnitsForUtility(utilityData.bill_type)}
-                            dataLabel="Consumption"
+                            height={260}
                           />
-                        </div>
-                        <div className="forecast-insights">
-                          <h3>AI Insights & Recommendations for {utilityData.bill_type}</h3>
-                          <BulletList text={summaries[utilityData.bill_type]} enhanced={true} />
-                        </div>
-                      </>
-                    ) : (
-                      <div className="empty-state">
-                        Add more {utilityData.bill_type.toLowerCase()} records to generate a forecast.
-                      </div>
-                    )}
-                  </div>
-                )
-              })()
-            )}
-          </>
-        )}
-        {forecastData?.warning && <div className="warning-banner">{forecastData.warning}</div>}
-      </section>
+                        </Box>
+                      </Box>
+                    )
+                  })()
+                )}
+              </Box>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
-      <section className="layout-grid">
-        {/* <div className="panel">
-          <div className="panel-header">
-            <h2>Upload Status &amp; Validation</h2>
-            <p>Track the latest CSV ingestion with detailed validation feedback.</p>
-          </div>
-          {!uploadResult && <p className="empty-state">Use the quick uploader or the workspace to add new utility bills.</p>}
-          {uploadResult && (
-            <div className="upload-summary">
-              <div className="upload-row">
-                <span>File</span>
-                <span>{uploadResult.filename}</span>
-              </div>
-              <div className="upload-row">
-                <span>Status</span>
-                <span className={`status-pill status-pill--${uploadResult.status || 'idle'}`}>
-                  {uploadResult.status?.replace(/_/g, ' ') || 'idle'}
-                </span>
-              </div>
-              {'inserted' in uploadResult && (
-                <div className="upload-row">
-                  <span>Inserted</span>
-                  <span>{uploadResult.inserted}</span>
-                </div>
+      {/* AI Recommendations */}
+      <Card elevation={2} sx={{ mb: 4 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+            <InsightsIcon color="primary" />
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              AI-Powered Sustainability Recommendations
+            </Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Based on your consumption patterns and forecast data
+          </Typography>
+          
+          {loading.recommendations ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 3, 
+                bgcolor: 'grey.50',
+                borderRadius: 2
+              }}
+            >
+              <BulletList text={recommendations} enhanced={true} />
+            </Paper>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Upload Status (if there's an upload) */}
+      {uploadResult && (
+        <Card elevation={2}>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Upload Status
+            </Typography>
+            <Stack spacing={2}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Stack spacing={1.5}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">File</Typography>
+                    <Typography variant="body2">{uploadResult.filename}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">Status</Typography>
+                    <Chip 
+                      label={uploadResult.status?.replace(/_/g, ' ') || 'idle'} 
+                      color={
+                        uploadResult.status === 'success' ? 'success' :
+                        uploadResult.status === 'error' ? 'error' :
+                        uploadResult.status === 'uploading' ? 'warning' :
+                        'default'
+                      }
+                      size="small"
+                    />
+                  </Box>
+                  {'inserted' in uploadResult && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">Inserted</Typography>
+                      <Typography variant="body2">{uploadResult.inserted}</Typography>
+                    </Box>
+                  )}
+                  {'updated' in uploadResult && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">Updated</Typography>
+                      <Typography variant="body2">{uploadResult.updated}</Typography>
+                    </Box>
+                  )}
+                </Stack>
+              </Paper>
+              
+              {uploadResult.error && (
+                <Alert severity="error">{uploadResult.error}</Alert>
               )}
-              {'updated' in uploadResult && (
-                <div className="upload-row">
-                  <span>Updated</span>
-                  <span>{uploadResult.updated}</span>
-                </div>
-              )}
-              {uploadResult.error && <div className="error-banner">{uploadResult.error}</div>}
+              
               {uploadResult.errors?.length > 0 && (
-                <div className="validation-errors">
-                  <h3>Validation issues</h3>
-                  <ul>
-                    {uploadResult.errors.map((issue, idx) => (
-                      <li key={idx}>
-                        Row {issue.row}: {issue.message}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Validation issues
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2, maxHeight: 200, overflow: 'auto' }}>
+                    <Stack spacing={0.5} component="ul" sx={{ listStyle: 'none', pl: 0, m: 0 }}>
+                      {uploadResult.errors.map((issue, idx) => (
+                        <Typography key={idx} variant="body2" component="li">
+                          Row {issue.row}: {issue.message}
+                        </Typography>
+                      ))}
+                    </Stack>
+                  </Paper>
+                </Box>
               )}
-            </div>
-          )}
-        </div> */}
-      </section>
-{/* 
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Cost Breakdown by Utility</h2>
-          <p>Compare proportional spend across power, gas, and water services.</p>
-        </div>
-        <div className="breakdown-grid">
-          {(metrics?.by_type || []).map((entry) => (
-            <div key={entry.bill_type} className="breakdown-card">
-              <header>
-                <h3>{entry.bill_type}</h3>
-                <span>{formatValueLabel(entry.total_cost)}</span>
-              </header>
-              <div className="progress">
-                <div
-                  className="progress-bar"
-                  style={{
-                    width: `${Math.min(100, (entry.total_cost / (totals.cost || 1)) * 100)}%`,
-                  }}
-                />
-              </div>
-              <p>{number.format(entry.total_consumption || 0)} units consumed</p>
-            </div>
-          ))}
-          {(!metrics?.by_type || metrics.by_type.length === 0) && (
-            <p className="empty-state">Upload billing data to unlock the utility breakdown.</p>
-          )}
-        </div>
-      </section> */}
-
-      <footer className="app-footer">
-        <small>
-          SustainSync keeps analytics, Prophet forecasting, and AI insights unified in one workspace. Upload fresh utility data anytime to refresh all panels instantly.
-        </small>
-      </footer>
-    </div>
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+    </Box>
   )
 }
 

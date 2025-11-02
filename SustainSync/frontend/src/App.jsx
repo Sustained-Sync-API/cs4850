@@ -1,12 +1,28 @@
 import { useEffect, useState } from 'react'
+import { ThemeProvider } from '@mui/material/styles'
+import {
+  CssBaseline,
+  Drawer,
+  Box,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Typography,
+  Divider,
+  Stack,
+} from '@mui/material'
+import { theme } from './theme'
 import brandLogo from './assets/brand-logo.svg'
 import Dashboard from './pages/Dashboard.jsx'
-import DataEntry from './pages/DataEntry.jsx'
+import Tables from './pages/Tables.jsx'
 import Sustainability from './pages/Sustainability.jsx'
-import './App.css'
+import { DashboardOutlined, EmojiEventsOutlined, TableChartOutlined } from '@mui/icons-material'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const DEFAULT_ROUTE = 'dashboard'
+const DRAWER_WIDTH = 240
 
 const getRouteFromHash = (fallback) => {
   if (typeof window === 'undefined') return fallback
@@ -33,144 +49,124 @@ const useHashRoute = (defaultRoute) => {
   return [route, navigate]
 }
 
-// Layout shell with persistent brand navigation and routed pages.
 function App() {
   const [route, navigate] = useHashRoute(DEFAULT_ROUTE)
-  const normalizedRoute = route === 'sustainability' ? 'sustainability' : (route === 'data-entry' ? 'data-entry' : DEFAULT_ROUTE)
-  
-  // Shared state across pages
-  const [sharedData, setSharedData] = useState({
-    forecastData: null,
-    recommendations: '',
-    recommendationSources: null,
-    recommendationWarning: '',
-    goals: [],
-    loading: {
-      forecast: true,
-      recommendations: true,
-      goals: true
-    }
-  })
 
-  // Fetch forecast data
-  const fetchForecast = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/forecast/?periods=12`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to load forecast')
-      setSharedData(prev => ({ ...prev, forecastData: data, loading: { ...prev.loading, forecast: false } }))
-    } catch (error) {
-      setSharedData(prev => ({ ...prev, forecastData: { error: error.message }, loading: { ...prev.loading, forecast: false } }))
+  const renderPage = () => {
+    switch (route) {
+      case 'tables':
+        return <Tables />
+      case 'sustainability':
+        return <Sustainability />
+      case 'dashboard':
+      default:
+        return <Dashboard />
     }
   }
 
-  // Fetch recommendations
-  const fetchRecommendations = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/recommendations/`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || data.warning || 'Unable to load recommendations')
-      setSharedData(prev => ({
-        ...prev,
-        recommendations: data.recommendations || '',
-        recommendationSources: data.sources || null,
-        recommendationWarning: data.warning || '',
-        loading: { ...prev.loading, recommendations: false }
-      }))
-    } catch (error) {
-      setSharedData(prev => ({
-        ...prev,
-        recommendations: '',
-        recommendationSources: null,
-        recommendationWarning: error.message,
-        loading: { ...prev.loading, recommendations: false }
-      }))
-    }
-  }
-
-  // Fetch goals
-  const fetchGoals = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/api/goals/`)
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to load goals')
-      setSharedData(prev => ({ ...prev, goals: data.goals || [], loading: { ...prev.loading, goals: false } }))
-    } catch (error) {
-      setSharedData(prev => ({ ...prev, goals: [], loading: { ...prev.loading, goals: false } }))
-    }
-  }
-
-  // Load shared data once on mount
-  useEffect(() => {
-    fetchForecast()
-    fetchRecommendations()
-    fetchGoals()
-  }, [])
-
-  // Refresh recommendations when goals change
-  const handleGoalsChange = () => {
-    fetchGoals()
-    fetchRecommendations()
-  }
-
-  const handleNavigate = (target) => (event) => {
-    event.preventDefault()
-    navigate(target)
-  }
+  const menuItems = [
+    { label: 'Dashboard', value: 'dashboard', icon: <DashboardOutlined /> },
+    { label: 'Sustainability Goals', value: 'sustainability', icon: <EmojiEventsOutlined /> },
+    { label: 'Tables', value: 'tables', icon: <TableChartOutlined /> },
+  ]
 
   return (
-    <div className="app-shell">
-      <nav className="side-nav">
-        <div className="brand">
-          <img src={brandLogo} alt="SustainSync logo" />
-        </div>
-        <div className="nav-links">
-          <a
-            href="#dashboard"
-            onClick={handleNavigate('dashboard')}
-            className={`nav-link${normalizedRoute === 'dashboard' ? ' nav-link--active' : ''}`}
-          >
-            <span className="nav-icon">📊</span>
-            <span className="nav-label">Dashboard</span>
-          </a>
-          <a
-            href="#sustainability"
-            onClick={handleNavigate('sustainability')}
-            className={`nav-link${normalizedRoute === 'sustainability' ? ' nav-link--active' : ''}`}
-          >
-            <span className="nav-icon">🌱</span>
-            <span className="nav-label">Sustainability</span>
-          </a>
-        </div>
-      </nav>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        {/* Left Sidebar */}
+        <Drawer
+          variant="permanent"
+          sx={{
+            width: DRAWER_WIDTH,
+            flexShrink: 0,
+            '& .MuiDrawer-paper': {
+              width: DRAWER_WIDTH,
+              boxSizing: 'border-box',
+              borderRight: 'none',
+              backgroundImage: 'linear-gradient(180deg, #0b2720 0%, #041510 100%)',
+              color: 'rgba(241, 245, 249, 0.95)',
+              display: 'flex',
+              flexDirection: 'column',
+              pt: 4,
+            },
+          }}
+        >
+          {/* Logo Section */}
+          <Box sx={{ px: 3, mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+              <img src={brandLogo} alt="SustainSync logo" style={{ width: '100%', height: 'auto', maxWidth: '180px' }} />
+            </Box>
+          </Box>
+          <Divider sx={{ borderColor: 'rgba(148, 163, 184, 0.2)' }} />
 
-      <main className="app-content">
-        {normalizedRoute === 'sustainability' ? (
-          <Sustainability 
-            goals={sharedData.goals}
-            recommendations={sharedData.recommendations}
-            recommendationSources={sharedData.recommendationSources}
-            recommendationWarning={sharedData.recommendationWarning}
-            loading={sharedData.loading}
-            onGoalsChange={handleGoalsChange}
-          />
-        ) : normalizedRoute === 'data-entry' ? (
-          <DataEntry />
-        ) : (
-          <Dashboard 
-            forecastData={sharedData.forecastData}
-            recommendations={sharedData.recommendations}
-            recommendationSources={sharedData.recommendationSources}
-            recommendationWarning={sharedData.recommendationWarning}
-            loading={sharedData.loading}
-            onDataRefresh={() => {
-              fetchForecast()
-              fetchRecommendations()
-            }}
-          />
-        )}
-      </main>
-    </div>
+          {/* Navigation Menu */}
+          <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', py: 2 }}>
+            <List sx={{ px: 2 }}>
+              {menuItems.map((item) => (
+                <ListItem key={item.value} disablePadding sx={{ mb: 0.5 }}>
+                  <ListItemButton
+                    selected={route === item.value}
+                    onClick={() => navigate(item.value)}
+                    sx={{
+                      borderRadius: 2,
+                      px: 2,
+                      py: 1.5,
+                      color: 'rgba(226, 232, 240, 0.8)',
+                      '& .MuiListItemIcon-root': {
+                        color: 'inherit',
+                        minWidth: 32,
+                      },
+                      '&.Mui-selected': {
+                        bgcolor: 'rgba(140, 195, 66, 0.25)',
+                        color: '#d9f99d',
+                        '& .MuiListItemIcon-root': {
+                          color: '#d9f99d',
+                        },
+                        '&:hover': {
+                          bgcolor: 'rgba(140, 195, 66, 0.35)',
+                        },
+                      },
+                      '&:hover': {
+                        bgcolor: 'rgba(15, 118, 110, 0.25)',
+                        color: 'rgba(224, 242, 254, 0.95)',
+                      },
+                    }}
+                  >
+                    <ListItemIcon>{item.icon}</ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{ fontWeight: route === item.value ? 600 : 400 }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+
+          <Divider sx={{ borderColor: 'rgba(148, 163, 184, 0.2)', my: 2 }} />
+
+          <Box sx={{ px: 3, pb: 4 }}>
+            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)', textAlign: 'center', fontStyle: 'italic' }}>
+              Smarter sustainability decisions at a glance.
+            </Typography>
+          </Box>
+        </Drawer>
+
+        {/* Main Content Area */}
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            bgcolor: 'background.default',
+            p: 4,
+            minHeight: '100vh',
+          }}
+        >
+          {renderPage()}
+        </Box>
+      </Box>
+    </ThemeProvider>
   )
 }
 
