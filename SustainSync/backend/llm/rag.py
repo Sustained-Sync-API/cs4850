@@ -384,12 +384,14 @@ def ask_llm(context, question, model_name=None):
                 body = r.json()
                 # Ollama native API returns 'response' field with generated text
                 if 'response' in body:
-                    return body['response']
+                    response_text = body['response']
+                    logger.info("Successfully extracted response text (length: %d chars)", len(response_text))
+                    return response_text
                 # fallback: return full JSON as string
-                logger.warning("Ollama 200 response did not contain 'response': %s", body)
+                logger.warning("Ollama 200 response did not contain 'response' key. Keys present: %s", list(body.keys()))
                 return str(body)
-            except Exception:
-                logger.exception("Failed to parse Ollama JSON response; returning raw text")
+            except Exception as e:
+                logger.exception("Failed to parse Ollama JSON response: %s", str(e))
                 return r.text
         else:
             logger.warning("Non-200 response from Ollama: %s - %s", r.status_code, r.text[:1000])

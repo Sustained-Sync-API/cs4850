@@ -110,7 +110,7 @@ const mapForecastToCostSeries = (series = []) =>
 
 // Simple line chart component
 function SimpleLineChart({ actual = [], forecast = [], height = 220, dataLabel = 'Usage', units = 'units' }) {
-  const padding = 36
+  const padding = 60
   const rightPadding = 30
   const width = 550
 
@@ -186,7 +186,7 @@ function SimpleLineChart({ actual = [], forecast = [], height = 220, dataLabel =
         />
 
         {gridLines.map(({ value, y }, idx) => (
-          <text key={idx} x={padding - 8} y={y + 4} className="chart-tick">
+          <text key={idx} x={padding - 12} y={y + 4} className="chart-tick">
             {formatValueLabel(value)}
           </text>
         ))}
@@ -970,7 +970,7 @@ function Dashboard({ forecastData = null, recommendations = '', recommendationSo
       {/* 12-Month Prophet Forecast */}
       <Card elevation={2} sx={{ mb: 4 }}>
         <CardContent>
-          <Box sx={{ mb: 3 }}>
+          <Box sx={{ mb: 3, textAlign: 'center' }}>
             <Typography variant="h5" sx={{ mb: 1, fontWeight: 700 }}>
               12-Month Prophet Forecast
             </Typography>
@@ -983,11 +983,13 @@ function Dashboard({ forecastData = null, recommendations = '', recommendationSo
             <Alert severity="error">{forecastData.error}</Alert>
           ) : (
             <>
-              <TabPanel
-                tabs={utilityTabs}
-                activeTab={activeUtilityTab}
-                onTabChange={setActiveUtilityTab}
-              />
+              <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+                <TabPanel
+                  tabs={utilityTabs}
+                  activeTab={activeUtilityTab}
+                  onTabChange={setActiveUtilityTab}
+                />
+              </Box>
 
               <Box sx={{ mt: 3 }}>
                 {activeUtilityTab === 'all' ? (
@@ -1056,38 +1058,36 @@ function Dashboard({ forecastData = null, recommendations = '', recommendationSo
                     )
 
                     return (
-                      <Box>
-                        <Box sx={{ 
-                          bgcolor: 'grey.50', 
-                          borderRadius: 2, 
-                          p: 3,
-                          mb: 3
-                        }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
-                            <Box>
-                              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                                {utilityData.bill_type} Forecast
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {utilityData.model ? `Model: ${utilityData.model}` : 'Model unavailable'}
-                              </Typography>
-                            </Box>
-                            {utilityData.warning && (
-                              <Chip 
-                                label={utilityData.warning} 
-                                color="warning" 
-                                size="small" 
-                              />
-                            )}
+                      <Box sx={{ 
+                        bgcolor: 'grey.50', 
+                        borderRadius: 2, 
+                        p: 3,
+                        mb: 3
+                      }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+                          <Box>
+                            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                              {utilityData.bill_type} Forecast
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {utilityData.model ? `Model: ${utilityData.model}` : 'Model unavailable'}
+                            </Typography>
                           </Box>
-                          <SimpleLineChart
-                            actual={mapHistoryToSeries(utilityData.history || [])}
-                            forecast={mapForecastToSeries(utilityData.series || [])}
-                            height={260}
-                            dataLabel="Usage"
-                            units={getUnitForUtility(utilityData.bill_type)}
-                          />
+                          {utilityData.warning && (
+                            <Chip 
+                              label={utilityData.warning} 
+                              color="warning" 
+                              size="small" 
+                            />
+                          )}
                         </Box>
+                        <SimpleLineChart
+                          actual={mapHistoryToSeries(utilityData.history || [])}
+                          forecast={mapForecastToSeries(utilityData.series || [])}
+                          height={260}
+                          dataLabel="Usage"
+                          units={getUnitForUtility(utilityData.bill_type)}
+                        />
                       </Box>
                     )
                   })()
