@@ -27,15 +27,17 @@ class Bill(models.Model):
 	UNITS_KWH = "kWh"
 	UNITS_THERMS = "therms"
 	UNITS_CCF = "CCF"
+	UNITS_GALLONS = "gallons"
 
 	UNITS_OF_MEASURE_CHOICES = [
 		(UNITS_KWH, "kWh"),
 		(UNITS_THERMS, "therms"),
 		(UNITS_CCF, "CCF"),
+		(UNITS_GALLONS, "gallons"),
 	]
 
 	units_of_measure = models.CharField(
-		max_length=8, choices=UNITS_OF_MEASURE_CHOICES, null=True, blank=True
+		max_length=10, choices=UNITS_OF_MEASURE_CHOICES, null=True, blank=True
 	)
 
 	# consumption values: use decimal for precision (eg kWh, therms, CCF)

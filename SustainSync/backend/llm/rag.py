@@ -691,40 +691,31 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
     else:
         # Sustainability format: Goal-focused bullet list
         num_goals = len(goals) if goals else 0
-        min_goal_recommendations = max(2, num_goals) if goals else 0  # At least 2 recommendations per goal, or 25% of total
+        total_recommendations = max(3, min(5, num_goals + 2)) if goals else 5  # 3-5 recommendations based on goal count
+        min_goal_recommendations = max(1, num_goals) if goals else 0  # At least 1 per goal or all if fewer goals
+        
+        bullet_count_str = f"- Exactly {total_recommendations} bullet points" + (" (or 3-5 if no goals)" if not goals else "")
         
         preamble = (
-            f"You are an intelligent **energy and sustainability analyst** for a mid-sized tech company in Duluth, GA. "
-            f"You are analyzing {label_name} data from the billing and consumption records (2015–2024) across power, gas, and water utilities. "
-            "Your goal is to provide **actionable sustainability recommendations** that improve both **financial efficiency** "
-            "and **environmental sustainability**."
+            f"You are a **sustainability co-benefit analyst** for a tech company in Duluth, GA analyzing {label_name} data (2015–Oct 2025) "
+            "across power, gas, and water utilities. Provide **high-impact recommendations** identifying co-benefits and synergies between sustainability goals."
             + goals_section + "\n\n"
-            "CRITICAL REQUIREMENTS:\n"
-            + (f"- Generate 8 total recommendations\n" if goals else "- Generate 5-8 recommendations\n")
-            + (f"- AT LEAST {min_goal_recommendations} recommendations (25% minimum) MUST explicitly reference and support the sustainability goals listed above\n" if goals else "")
-            + (f"- The remaining recommendations can address general efficiency, cost savings, or environmental improvements\n" if goals else "")
-            + "- ALWAYS cite specific numbers from the data (exact costs, consumption values, dates, percent changes)\n"
-            "- Calculate and report potential savings with exact dollar amounts (e.g., '$1,234.56/year')\n"
-            "- Quantify environmental impact (carbon reduction, efficiency gains) where applicable\n"
-            "- Provide specific implementation steps with difficulty level and timeframe\n"
-            + ("\n" if goals else "")
-            + ("FOR GOAL-ALIGNED RECOMMENDATIONS:\n" if goals else "")
-            + ("- Start with 'To achieve [Goal Name]...' or 'Supporting [Goal Name]...'\n" if goals else "")
-            + ("- Show measurable progress toward goal targets with percentages (e.g., 'achieves 60% of your 20% reduction goal')\n" if goals else "")
-            + ("- Align implementation timelines with goal target dates\n" if goals else "")
-            + ("\n" if goals else "")
-            + ("FOR GENERAL RECOMMENDATIONS:\n" if goals else "")
-            + ("- Focus on cost efficiency, waste reduction, or environmental impact\n" if goals else "")
-            + ("- Provide concrete actions with quantified benefits\n" if goals else "")
+            "REQUIREMENTS:\n"
+            + (f"- Generate exactly {total_recommendations} recommendations\n" if goals else "- Generate 3-5 recommendations\n")
+            + (f"- AT LEAST {min_goal_recommendations} MUST reference the sustainability goals above\n" if goals else "")
+            + "- Identify cross-utility co-benefits (e.g., HVAC efficiency reduces both power and gas)\n"
+            + "- Cite specific data: costs, consumption values, dates, percent changes\n"
+            + "- Quantify multi-domain impacts (e.g., 'Saves $500 in power, $200 in gas, reduces 2 tons CO₂')\n"
+            + ("- Show goal synergies (e.g., 'Also supports [Other Goal] by reducing X')\n" if goals else "")
             + "\n"
-            "RESPONSE FORMAT:\n"
-            "- Provide exactly 8 bullet points (or 5-8 if no goals), each containing one actionable recommendation\n"
-            "- Use exact figures, not approximations (e.g., '$1,234.56' not 'about $1,200')\n"
-            "- Keep each bullet to 2-3 sentences maximum\n"
-            "- Include: action, " + ("goal alignment (for goal-related ones), " if goals else "") + "cost/environmental impact, and timeline\n"
-            "- Output ONLY the bulleted recommendations with NO headers, explanations, or extra text\n"
+            "FORMAT:\n"
+            + bullet_count_str + "\n"
+            "- Each bullet: 1-2 sentences with action, quantified co-benefits, and timeline\n"
+            + ("- Start goal-aligned ones with 'To achieve [Goal Name]...' or 'Supporting [Goal Name]...'\n" if goals else "")
+            + "- Use exact figures (e.g., '$1,234.56' not 'about $1,200')\n"
+            "- Output ONLY bulleted recommendations, NO headers or extra text\n"
         )
-        prompt = f"{preamble}\nBased on the data context provided, generate sustainability recommendations:"
+        prompt = f"{preamble}\nGenerate sustainability recommendations with co-benefit analysis:"
 
     if not context:
         return fallback
