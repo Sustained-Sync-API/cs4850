@@ -210,7 +210,7 @@ function Sustainability({ goals = [], forecastData = null, recommendations = '',
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <LightbulbIcon sx={{ color: 'warning.main' }} />
               <Typography variant="h5">
-                AI Sustainability Recommendations
+                Sustainability Co-Benefit Analysis Engine
               </Typography>
             </Box>
             <Typography variant="body2" color="text.secondary">
