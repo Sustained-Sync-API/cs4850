@@ -267,16 +267,19 @@ def ask_llm(context, question):
     "You are reviewing multi-year billing and consumption data (2015–2024) across power, gas, and water utilities. "
     "Your goal is to provide **insightful, data-driven analysis** that helps the company improve both its **financial efficiency** "
     "and **environmental sustainability**.\n\n"
-    "When analyzing, consider key sustainability metrics such as:\n"
-    "- Year-over-year changes in total and per-unit consumption.\n"
-    "- Cost per unit of energy or water used.\n"
-    "- Seasonal or regional consumption patterns.\n"
-    "- Potential carbon reduction or energy efficiency improvements.\n"
-    "- How shifts in resource usage might align with sustainability goals or company policies.\n\n"
+    "CRITICAL ANALYSIS REQUIREMENTS:\n"
+    "- ALWAYS cite specific numbers from the data (exact costs, consumption values, dates, percent changes).\n"
+    "- Identify year-over-year trends with precise quantification (e.g., '12.3% increase from 2023 to 2024').\n"
+    "- Calculate and report cost per unit metrics (e.g., $/kWh, $/therm, $/gallon).\n"
+    "- Flag seasonal patterns, anomalies, or efficiency opportunities with supporting evidence.\n"
+    "- Estimate carbon reduction potential or energy efficiency gains where applicable.\n"
+    "- Provide actionable recommendations with quantified impact estimates.\n"
+    "- Align insights with company sustainability goals when provided.\n\n"
     "When you respond:\n"
-    "- Focus on trends, anomalies, and improvement opportunities.\n"
-    "- Quantify metrics when possible (e.g., percent increases, cost per unit).\n"
-    "- Provide actionable recommendations to improve efficiency or reduce environmental impact.\n\n"
+    "- Use exact figures, not approximations (e.g., say '$1,234.56' not 'about $1,200').\n"
+    "- Compare periods explicitly (e.g., 'Q4 2024 vs Q4 2023').\n"
+    "- Prioritize insights by financial impact and sustainability benefit.\n"
+    "- Suggest 2-3 concrete action steps for each key finding.\n\n"
     )
 
     # prompt = f"{preamble}Context:\n{context}\n\nQuestion:\n{question}\n\nAnswer with specific trends and comparisons."
@@ -292,16 +295,16 @@ def ask_llm(context, question):
 
     prompt = f"{preamble}{hint}\n\nContext:\n{context}\n\nQuestion:\n{question}\n\nAnswer with specific trends and comparisons."
 
-    # 1) Prefer HTTP call to Ollama's completions endpoint (stable across
-    # client versions). Use model id with explicit tag returned by the
-    # /v1/models endpoint (we expect "llama3.2:latest").
+    # 1) Prefer HTTP call to Ollama's native generate endpoint
+    # Ollama 0.12.6 uses /api/generate, not OpenAI-compatible /v1/completions
     try:
         OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'ollama')
         OLLAMA_PORT = os.environ.get('OLLAMA_PORT', '11434')
-        url = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/completions"
+        url = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/api/generate"
         payload = {
             'model': os.environ.get('OLLAMA_MODEL', 'llama3.2:latest'),
             'prompt': prompt,
+            'stream': False,
         }
 
         # Prepare a requests session with retry logic for transient errors
@@ -321,11 +324,11 @@ def ask_llm(context, question):
         if r.status_code == 200:
             try:
                 body = r.json()
-                # Ollama returns choices with 'text' for completions
-                if 'choices' in body and len(body['choices']) > 0:
-                    return body['choices'][0].get('text', '')
+                # Ollama native API returns 'response' field with generated text
+                if 'response' in body:
+                    return body['response']
                 # fallback: return full JSON as string
-                logger.warning("Ollama 200 response did not contain 'choices': %s", body)
+                logger.warning("Ollama 200 response did not contain 'response': %s", body)
                 return str(body)
             except Exception:
                 logger.exception("Failed to parse Ollama JSON response; returning raw text")
@@ -341,19 +344,16 @@ def ask_llm(context, question):
     _init_ollama_client_if_needed()
     if _OLLAMA_AVAILABLE and client is not None:
         try:
-            # Some client versions expose chat; others may use chat-like API.
-            res = None
-            try:
-                res = client.chat(model="llama3.2", messages=[{"role": "user", "content": prompt}])
-                return res['message']['content']
-            except Exception:
-                # Try a positional chat or other client shapes if available
-                try:
-                    res = client.chat("llama3.2", prompt)
-                    return res.get('message', {}).get('content', str(res))
-                except Exception:
-                    pass
+            # Use generate() method for Ollama native API
+            res = client.generate(
+                model="llama3.2",
+                prompt=prompt
+            )
+            if isinstance(res, dict) and 'response' in res:
+                return res['response']
+            return str(res)
         except Exception:
+            logger.exception("Python client generate() call failed")
             pass
 
     # Fallback when Ollama or the chat call is not available. Return a
@@ -567,8 +567,14 @@ def _summarize_usage_with_llm(label, context, fallback):
 
     label_name = 'Total portfolio' if label == 'total' else f"{label} usage"
     prompt = (
-        f"Review the {label_name} metrics and forecast. "
-        "Provide three concise bullet points with actionable ideas to reduce consumption and improve sustainability."
+        f"Analyze the {label_name} data and forecast provided in the context.\n\n"
+        "Provide 3-5 specific insights in this format:\n"
+        "1. **Key Trend**: [Describe the most significant pattern with exact numbers and percent changes]\n"
+        "2. **Cost Efficiency**: [Calculate and report cost per unit trends, identify optimization opportunities]\n"
+        "3. **Forecast Analysis**: [Interpret the forecast - expected changes, risks, seasonal factors]\n"
+        "4. **Actionable Recommendation**: [Specific action with estimated cost/carbon impact]\n"
+        "5. **Sustainability Note**: [Environmental impact or efficiency improvement opportunity]\n\n"
+        "MUST include: exact dollar amounts, consumption values, dates, and percent changes from the data."
     )
 
     if not context:
