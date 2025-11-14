@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from io import TextIOWrapper
 
@@ -188,6 +189,7 @@ def forecast(request):
                 goal_dict = {
                     'title': g.title,
                     'description': g.description,
+                    'analysis_type': g.analysis_type,
                     'target_date': g.target_date.strftime('%B %Y') if g.target_date else None
                 }
                 goals.append(goal_dict)
@@ -380,6 +382,7 @@ def _serialize_goal(goal):
         'id': goal.id,
         'title': goal.title,
         'description': goal.description,
+        'analysis_type': goal.analysis_type,
         'target_date': goal.target_date.isoformat() if goal.target_date else None,
         'created_at': goal.created_at.isoformat(),
         'updated_at': goal.updated_at.isoformat()
@@ -446,10 +449,35 @@ def _parse_decimal(value: str | None, field_name: str):
 def _parse_date(value: str | None, field_name: str):
     if value in (None, ''):
         return None
+    
+    # First try Django's strict ISO parser
     parsed = parse_date(value)
-    if parsed is None:
-        raise ValueError(f"Field '{field_name}' must be an ISO date (YYYY-MM-DD)")
-    return parsed
+    if parsed is not None:
+        return parsed
+    
+    # If that fails, try common date formats
+    common_formats = [
+        '%Y-%m-%d',      # 2024-01-15 (ISO)
+        '%m/%d/%Y',      # 01/15/2024 (US format)
+        '%d/%m/%Y',      # 15/01/2024 (EU format)
+        '%m-%d-%Y',      # 01-15-2024
+        '%d-%m-%Y',      # 15-01-2024
+        '%Y/%m/%d',      # 2024/01/15
+        '%m/%d/%y',      # 01/15/24 (2-digit year)
+        '%d/%m/%y',      # 15/01/24 (2-digit year)
+    ]
+    
+    for fmt in common_formats:
+        try:
+            return datetime.strptime(value.strip(), fmt).date()
+        except (ValueError, AttributeError):
+            continue
+    
+    # If all formats fail, raise error with helpful message
+    raise ValueError(
+        f"Field '{field_name}' must be a valid date. "
+        f"Accepted formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY, or similar. Got: '{value}'"
+    )
 
 
 @require_http_methods(["GET"])
@@ -667,8 +695,9 @@ def upload_bills(request):
             consumption = _parse_decimal(row.get('consumption'), 'consumption')
             cost = _parse_decimal(row.get('cost'), 'cost')
 
-            # Check for existing bill with same month/year and bill_type
-            # If found, delete it so the new one can take its place
+            # Check for duplicate bills with same bill_date month/year and bill_type
+            # Delete older duplicates, keeping the newest upload
+            deleted_count = 0
             if bill_date:
                 year = bill_date.year
                 month = bill_date.month
@@ -678,9 +707,9 @@ def upload_bills(request):
                     bill_date__month=month,
                     bill_type=bill_type
                 ).exclude(bill_id=bill_id).delete()[0]
-                
-                if deleted_count > 0:
-                    updated += deleted_count
+            
+            if deleted_count > 0:
+                updated += deleted_count
 
             defaults = {
                 'bill_type': bill_type,

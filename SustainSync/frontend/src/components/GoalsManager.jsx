@@ -32,6 +32,7 @@ function GoalsManager({ onClose }) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    analysis_type: 'goals',
     target_date: '',
   })
 
@@ -66,7 +67,7 @@ function GoalsManager({ onClose }) {
     }
     setIsEditing(true)
     setEditingGoal(null)
-    setFormData({ title: '', description: '', target_date: '' })
+    setFormData({ title: '', description: '', analysis_type: 'goals', target_date: '' })
   }
 
   const handleEdit = (goal) => {
@@ -75,6 +76,7 @@ function GoalsManager({ onClose }) {
     setFormData({
       title: goal.title,
       description: goal.description,
+      analysis_type: goal.analysis_type || 'goals',
       target_date: goal.target_date || '',
     })
   }
@@ -129,7 +131,7 @@ function GoalsManager({ onClose }) {
       await fetchGoals()
       setIsEditing(false)
       setEditingGoal(null)
-      setFormData({ title: '', description: '', target_date: '' })
+      setFormData({ title: '', description: '', analysis_type: 'goals', target_date: '' })
     } catch (err) {
       setError(err.message)
     }
@@ -138,7 +140,7 @@ function GoalsManager({ onClose }) {
   const handleCancel = () => {
     setIsEditing(false)
     setEditingGoal(null)
-    setFormData({ title: '', description: '', target_date: '' })
+    setFormData({ title: '', description: '', analysis_type: 'goals', target_date: '' })
     setError('')
   }
 
@@ -190,6 +192,20 @@ function GoalsManager({ onClose }) {
               placeholder="Describe what you want to achieve and how..."
             />
             <TextField
+              select
+              label="Analysis Type"
+              value={formData.analysis_type}
+              onChange={(e) => setFormData({ ...formData, analysis_type: e.target.value })}
+              fullWidth
+              required
+              SelectProps={{ native: true }}
+              helperText="Choose how recommendations should be generated for this goal"
+            >
+              <option value="goals">Goals-Focused (2 recommendations per goal)</option>
+              <option value="co-benefit">Co-Benefit Analysis (cross-utility synergies)</option>
+              <option value="environmental">Environmental Impact (carbon & ecological focus)</option>
+            </TextField>
+            <TextField
               label="Target Date (Optional)"
               type="date"
               value={formData.target_date}
@@ -237,6 +253,11 @@ function GoalsManager({ onClose }) {
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       {goal.description}
+                    </Typography>
+                    <Typography variant="caption" color="primary" sx={{ display: 'block', mb: 0.5, fontWeight: 500 }}>
+                      {goal.analysis_type === 'goals' && '📊 Goals-Focused (2 recs/goal)'}
+                      {goal.analysis_type === 'co-benefit' && '🔄 Co-Benefit Analysis'}
+                      {goal.analysis_type === 'environmental' && '🌱 Environmental Impact'}
                     </Typography>
                     {goal.target_date && (
                       <Typography variant="caption" color="text.secondary">

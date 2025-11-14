@@ -409,8 +409,14 @@ def ask_llm(context, question, model_name=None):
                 model=selected_model,
                 prompt=prompt
             )
+            # The Python client returns an object with a 'response' attribute
+            if hasattr(res, 'response'):
+                return res.response
+            # Sometimes it's a dict
             if isinstance(res, dict) and 'response' in res:
                 return res['response']
+            # Fallback: try to get response field
+            logger.warning("Python client returned unexpected format: %s", type(res))
             return str(res)
         except Exception:
             logger.exception("Python client generate() call failed")
@@ -622,16 +628,17 @@ def _build_usage_context(df, forecast_result, label):
     return context, fallback
 
 
-def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboard_format=False):
+def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboard_format=False, analysis_type='all'):
     """Request a concise optimisation summary for the provided utility slice.
     
     Args:
         label: Utility type label ('total', 'Power', 'Gas', 'Water')
         context: Data context for analysis
         fallback: Fallback text if LLM fails
-        goals: List of sustainability goals dicts with 'title', 'description', 'target_date'
+        goals: List of sustainability goals dicts with 'title', 'description', 'target_date', 'analysis_type'
         use_dashboard_format: If True, use 3-section format (Key Trends, Cost Efficiency, Actionable Recommendations).
-                             If False, use goal-focused bullet list format.
+                             If False, generates based on analysis_type parameter.
+        analysis_type: Type of analysis ('goals', 'co-benefit', 'environmental', or 'all' to generate all three)
     """
 
     label_name = 'Total portfolio' if label == 'total' else f"{label} usage"
@@ -639,7 +646,7 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
     # Build goals context if provided
     goals_section = ""
     if goals and len(goals) > 0:
-        logger.info(f"Generating recommendations with {len(goals)} sustainability goals for {label_name}")
+        logger.info(f"Generating {analysis_type} recommendations with {len(goals)} sustainability goals for {label_name}")
         goals_list = []
         for g in goals:
             goal_str = f"  • {g['title']}: {g['description']}"
@@ -651,7 +658,7 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
             + "\n".join(goals_list) + "\n"
         )
     else:
-        logger.info(f"Generating recommendations without sustainability goals for {label_name}")
+        logger.info(f"Generating {analysis_type} recommendations without sustainability goals for {label_name}")
     
     if use_dashboard_format:
         # Dashboard format: Key Trends, Cost Efficiency, Actionable Recommendations
@@ -689,33 +696,98 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
             "7. Avoid nested sections, sub-headers, or complex formatting\n"
         )
     else:
-        # Sustainability format: Goal-focused bullet list
+        # Sustainability format: Choose based on analysis_type
         num_goals = len(goals) if goals else 0
-        total_recommendations = max(3, min(5, num_goals + 2)) if goals else 5  # 3-5 recommendations based on goal count
-        min_goal_recommendations = max(1, num_goals) if goals else 0  # At least 1 per goal or all if fewer goals
         
-        bullet_count_str = f"- Exactly {total_recommendations} bullet points" + (" (or 3-5 if no goals)" if not goals else "")
-        
-        preamble = (
-            f"You are a **sustainability co-benefit analyst** for a tech company in Duluth, GA analyzing {label_name} data (2015–Oct 2025) "
-            "across power, gas, and water utilities. Provide **high-impact recommendations** identifying co-benefits and synergies between sustainability goals."
-            + goals_section + "\n\n"
-            "REQUIREMENTS:\n"
-            + (f"- Generate exactly {total_recommendations} recommendations\n" if goals else "- Generate 3-5 recommendations\n")
-            + (f"- AT LEAST {min_goal_recommendations} MUST reference the sustainability goals above\n" if goals else "")
-            + "- Identify cross-utility co-benefits (e.g., HVAC efficiency reduces both power and gas)\n"
-            + "- Cite specific data: costs, consumption values, dates, percent changes\n"
-            + "- Quantify multi-domain impacts (e.g., 'Saves $500 in power, $200 in gas, reduces 2 tons CO₂')\n"
-            + ("- Show goal synergies (e.g., 'Also supports [Other Goal] by reducing X')\n" if goals else "")
-            + "\n"
-            "FORMAT:\n"
-            + bullet_count_str + "\n"
-            "- Each bullet: 1-2 sentences with action, quantified co-benefits, and timeline\n"
-            + ("- Start goal-aligned ones with 'To achieve [Goal Name]...' or 'Supporting [Goal Name]...'\n" if goals else "")
-            + "- Use exact figures (e.g., '$1,234.56' not 'about $1,200')\n"
-            "- Output ONLY bulleted recommendations, NO headers or extra text\n"
-        )
-        prompt = f"{preamble}\nGenerate sustainability recommendations with co-benefit analysis:"
+        if analysis_type == 'goals':
+            # Goals-Focused: 2 recommendations per goal
+            total_recommendations = num_goals * 2 if goals else 3
+            
+            preamble = (
+                f"You are a **sustainability advisor** for a tech company in Duluth, GA analyzing {label_name} data (2015–Nov 2025). "
+                "Provide **actionable recommendations** aligned with each sustainability goal."
+                + goals_section + "\n\n"
+                "REQUIREMENTS:\n"
+                + f"- Generate EXACTLY {total_recommendations} recommendations ({num_goals} goals × 2 recommendations each)\n"
+                + "- Each goal MUST have exactly 2 specific, actionable recommendations\n"
+                + "- Cite specific data: costs, consumption values, dates, percent changes\n"
+                + "- Quantify impact for each recommendation (e.g., 'Saves $500/month, reduces 2 tons CO₂/year')\n"
+                + "\n"
+                "FORMAT RULES:\n"
+                + "- Start each bullet with the ACTION, not 'For [Goal Name]:' or 'To achieve...'\n"
+                + "- Each bullet: ONE clear sentence with action, impact, and timeline\n"
+                + "- Use exact figures (e.g., '$1,234.56' not 'about $1,200')\n"
+                + "- NO section headers, NO goal titles, NO extra text\n"
+                + "- Output ONLY the bulleted recommendations\n"
+                + "\n"
+                + "EXAMPLE FORMAT:\n"
+                + "- Install LED lighting in all office spaces by Q2 2026, reducing power consumption by 12% ($3,200/year savings, 2.1 tons CO₂ reduction).\n"
+                + "- Upgrade HVAC systems to Energy Star certified units, saving $1,500/month and reducing gas usage by 18%.\n"
+                + "\n"
+                + f"CRITICAL: Generate EXACTLY {total_recommendations} recommendations. NO MORE, NO LESS. STOP after {total_recommendations} bullets.\n"
+            )
+            prompt = f"{preamble}\nGenerate EXACTLY {total_recommendations} recommendations and STOP:"
+            
+        elif analysis_type == 'co-benefit':
+            # Co-Benefit Analysis: Focus on cross-utility synergies (exactly 3 recommendations)
+            total_recommendations = 3
+            
+            preamble = (
+                f"You are a **sustainability co-benefit analyst** for a tech company in Duluth, GA analyzing {label_name} data (2015–Nov 2025) "
+                "across power, gas, and water utilities. Provide **high-impact recommendations** identifying co-benefits and synergies."
+                + goals_section + "\n\n"
+                "REQUIREMENTS:\n"
+                + "- Generate EXACTLY 3 recommendations\n"
+                + (f"- Reference the sustainability goals where applicable\n" if goals else "")
+                + "- Identify cross-utility co-benefits (e.g., HVAC efficiency reduces both power and gas)\n"
+                + "- Cite specific data: costs, consumption values, dates, percent changes\n"
+                + "- Quantify multi-domain impacts (e.g., 'Saves $500 in power, $200 in gas, reduces 2 tons CO₂')\n"
+                + "\n"
+                "FORMAT RULES:\n"
+                + "- Start each bullet with the ACTION, not 'To achieve...' or 'Supporting...'\n"
+                + "- Each bullet: ONE clear sentence with action, multi-utility impact, and timeline\n"
+                + "- Use exact figures (e.g., '$1,234.56' not 'about $1,200')\n"
+                + "- NO section headers, NO goal prefixes, NO extra text\n"
+                + "- Output ONLY the bulleted recommendations\n"
+                + "\n"
+                + "EXAMPLE FORMAT:\n"
+                + "- Optimize HVAC schedules to reduce power by 15% and gas by 12%, saving $4,800/year ($3,200 power + $1,600 gas) and cutting 3.2 tons CO₂ annually.\n"
+                + "- Install smart building controls to coordinate lighting and HVAC, reducing combined utility costs by $6,500/year.\n"
+                + "\n"
+                + "CRITICAL: Generate EXACTLY 3 recommendations. NO MORE, NO LESS. STOP after 3 bullets.\n"
+            )
+            prompt = f"{preamble}\nGenerate EXACTLY 3 co-benefit recommendations and STOP:"
+            
+        else:  # analysis_type == 'environmental'
+            # Environmental Impact: Focus on carbon, emissions, ecological impact (exactly 3 recommendations)
+            total_recommendations = 3
+            
+            preamble = (
+                f"You are an **environmental impact analyst** for a tech company in Duluth, GA analyzing {label_name} data (2015–Nov 2025). "
+                "Provide **high-impact recommendations** focusing on carbon emissions, ecological impact, and environmental sustainability."
+                + goals_section + "\n\n"
+                "REQUIREMENTS:\n"
+                + "- Generate EXACTLY 3 recommendations\n"
+                + (f"- Reference the sustainability goals where applicable\n" if goals else "")
+                + "- Focus on carbon footprint reduction (tons CO₂ equivalent)\n"
+                + "- Quantify ecological benefits (water conservation, habitat impact, air quality)\n"
+                + "- Cite specific data: emissions, consumption, renewable energy potential\n"
+                + "- Include environmental certifications where applicable (LEED, Energy Star, etc.)\n"
+                + "\n"
+                "FORMAT RULES:\n"
+                + "- Start each bullet with the ACTION, not goal names or prefixes\n"
+                + "- Each bullet: ONE clear sentence with action, carbon impact, and timeline\n"
+                + "- Use exact figures (e.g., '3.4 tons CO₂' not 'about 3 tons')\n"
+                + "- NO section headers, NO goal titles, NO extra text\n"
+                + "- Output ONLY the bulleted recommendations\n"
+                + "\n"
+                + "EXAMPLE FORMAT:\n"
+                + "- Install 250kW solar panels on Building A by Q3 2026, generating 380,000 kWh/year and reducing carbon emissions by 12.5 tons CO₂ annually.\n"
+                + "- Replace gas water heaters with electric heat pumps, cutting natural gas consumption by 35% and eliminating 8.2 tons CO₂/year.\n"
+                + "\n"
+                + "CRITICAL: Generate EXACTLY 3 recommendations. NO MORE, NO LESS. STOP after 3 bullets.\n"
+            )
+            prompt = f"{preamble}\nGenerate EXACTLY 3 environmental impact recommendations and STOP:"
 
     if not context:
         return fallback
@@ -725,6 +797,32 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
         summary = ask_llm(context, prompt, model_name='recommendations')
         if not summary or summary.strip().lower().startswith('(llm unavailable)'):
             return fallback
+        
+        # Post-process to enforce bullet limits
+        if not use_dashboard_format:
+            lines = summary.split('\n')
+            bullets = []
+            for line in lines:
+                line = line.strip()
+                if line and (line.startswith('-') or line.startswith('•') or line.startswith('*')):
+                    bullets.append(line)
+            
+            # Enforce limits based on analysis type
+            if analysis_type == 'goals':
+                # Keep first (num_goals * 2) bullets
+                num_goals = len(goals) if goals else 0
+                max_bullets = num_goals * 2 if num_goals > 0 else 3
+                bullets = bullets[:max_bullets]
+            elif analysis_type == 'co-benefit':
+                # Keep first 3 bullets
+                bullets = bullets[:3]
+            elif analysis_type == 'environmental':
+                # Keep first 3 bullets
+                bullets = bullets[:3]
+            
+            # Reconstruct summary with only the allowed bullets
+            summary = '\n'.join(bullets)
+        
         return summary
     except Exception:
         return fallback
@@ -757,7 +855,16 @@ def forecast_trend_with_breakdown(bills_df, periods=12, include_summaries=False,
     summaries = {}
     context, fallback = _build_usage_context(bills_df, total_forecast, 'total')
     if include_summaries:
-        summaries['total'] = _summarize_usage_with_llm('total', context, fallback, goals=goals, use_dashboard_format=use_dashboard_format)
+        if use_dashboard_format:
+            # Dashboard format: single summary
+            summaries['total'] = _summarize_usage_with_llm('total', context, fallback, goals=goals, use_dashboard_format=True)
+        else:
+            # Sustainability format: generate all three analysis types
+            summaries['total_goals'] = _summarize_usage_with_llm('total', context, fallback, goals=goals, use_dashboard_format=False, analysis_type='goals')
+            summaries['total_cobenefit'] = _summarize_usage_with_llm('total', context, fallback, goals=goals, use_dashboard_format=False, analysis_type='co-benefit')
+            summaries['total_environmental'] = _summarize_usage_with_llm('total', context, fallback, goals=goals, use_dashboard_format=False, analysis_type='environmental')
+            # Keep 'total' for backward compatibility (use goals type)
+            summaries['total'] = summaries['total_goals']
     else:
         summaries['total'] = fallback
 

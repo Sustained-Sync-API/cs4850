@@ -75,8 +75,25 @@ class Bill(models.Model):
 class SustainabilityGoal(models.Model):
 	"""Model representing custom sustainability goals set by the user."""
 	
+	# Analysis type choices
+	ANALYSIS_GOALS = "goals"
+	ANALYSIS_COBENEFIT = "co-benefit"
+	ANALYSIS_ENVIRONMENTAL = "environmental"
+	
+	ANALYSIS_TYPE_CHOICES = [
+		(ANALYSIS_GOALS, "Goals-Focused (2 recommendations per goal)"),
+		(ANALYSIS_COBENEFIT, "Co-Benefit Analysis (cross-utility synergies)"),
+		(ANALYSIS_ENVIRONMENTAL, "Environmental Impact (carbon & ecological focus)"),
+	]
+	
 	title = models.CharField(max_length=200)
 	description = models.TextField()
+	analysis_type = models.CharField(
+		max_length=20,
+		choices=ANALYSIS_TYPE_CHOICES,
+		default=ANALYSIS_GOALS,
+		help_text="Type of analysis to perform for this goal"
+	)
 	target_date = models.DateField(null=True, blank=True, help_text="Target completion date")
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)

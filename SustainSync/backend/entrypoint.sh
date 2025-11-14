@@ -26,6 +26,10 @@ until python backend/import_bills.py; do
   sleep 2
 done
 
+# Cleanup duplicate bills with overlapping service periods
+echo "Running duplicate bill cleanup..."
+python backend/cleanup_duplicates.py || echo "⚠️  Duplicate cleanup failed, continuing startup."
+
 # Create or update Django superuser from environment variables if provided
 if [ -n "${DJANGO_SUPERUSER_USERNAME:-}" ] && [ -n "${DJANGO_SUPERUSER_EMAIL:-}" ] && [ -n "${DJANGO_SUPERUSER_PASSWORD:-}" ]; then
   echo "Ensuring Django superuser exists: $DJANGO_SUPERUSER_USERNAME"

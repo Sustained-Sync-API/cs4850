@@ -10,18 +10,209 @@ import {
   Chip,
   Alert,
   Paper,
-  CircularProgress
+  CircularProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material'
 import FlagIcon from '@mui/icons-material/Flag'
 import LightbulbIcon from '@mui/icons-material/Lightbulb'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import GoalsManager from '../components/GoalsManager'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 
-// Simple bullet list recommendations
+// Group goals by analysis type and display recommendations in accordions
+function RecommendationsByType({ goals = [], forecastData = null }) {
+  if (!forecastData?.summaries) return (
+    <Alert severity="info" icon={<LightbulbIcon />}>
+      Insights will appear once data is available.
+    </Alert>
+  )
+
+  // Extract the three different recommendation types from forecast data
+  const goalsRecommendations = forecastData.summaries.total_goals || forecastData.summaries.total || ''
+  const coBenefitRecommendations = forecastData.summaries.total_cobenefit || ''
+  const environmentalRecommendations = forecastData.summaries.total_environmental || ''
+
+  // Parse function to convert text into lines
+  const parseLines = (text) => {
+    if (!text) return []
+    return text
+      .split(/\n+/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => {
+        // Remove bullet points, numbering, and other prefixes
+        return line
+          .replace(/^[•\-*►▸▹◦⦿⦾]\s*/, '')
+          .replace(/^\d+[\.\)\:]\s*/, '')
+          .replace(/^#+\s*/, '')
+          .replace(/\*\*/g, '')
+          .trim()
+      })
+      .filter(line => line.length > 10) // Filter out very short lines
+  }
+
+  const goalsLines = parseLines(goalsRecommendations)
+  const coBenefitLines = parseLines(coBenefitRecommendations)
+  const environmentalLines = parseLines(environmentalRecommendations)
+
+  // Group goals by analysis type
+  const goalsByType = {
+    'goals': [],
+    'co-benefit': [],
+    'environmental': []
+  }
+
+  goals.forEach(goal => {
+    const type = goal.analysis_type || 'goals'
+    if (goalsByType[type]) {
+      goalsByType[type].push(goal)
+    }
+  })
+
+  // Analysis type metadata with their corresponding recommendation lines
+  const analysisTypes = {
+    'goals': {
+      icon: '📊',
+      title: 'Goals-Focused Recommendations',
+      description: '2 specific recommendations per goal',
+      lines: goalsLines
+    },
+    'co-benefit': {
+      icon: '🔄',
+      title: 'Co-Benefit Analysis',
+      description: 'Cross-utility synergies and multi-domain impacts',
+      lines: coBenefitLines
+    },
+    'environmental': {
+      icon: '🌱',
+      title: 'Environmental Impact Analysis',
+      description: 'Carbon emissions and ecological benefits',
+      lines: environmentalLines
+    }
+  }
+
+  return (
+    <Stack spacing={2}>
+      {/* Always show all three sections */}
+      {Object.entries(analysisTypes).map(([type, meta]) => {
+        const typeGoals = goalsByType[type]
+        const sectionLines = meta.lines
+        
+        return (
+          <Accordion key={type} defaultExpanded={sectionLines.length > 0}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                <Typography variant="h6" sx={{ fontSize: '1.5rem' }}>
+                  {meta.icon}
+                </Typography>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    {meta.title}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {meta.description}
+                    {typeGoals.length > 0 && ` • ${typeGoals.length} goal${typeGoals.length !== 1 ? 's' : ''}`}
+                  </Typography>
+                </Box>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              {sectionLines.length > 0 ? (
+                typeGoals.length > 0 && type === 'goals' ? (
+                  // Goals type with actual goals: show 2 recs per goal
+                  <Stack spacing={3}>
+                    {typeGoals.map((goal, idx) => (
+                      <Paper 
+                        key={goal.id}
+                        elevation={0}
+                        sx={{ 
+                          p: 3, 
+                          backgroundColor: 'rgba(37, 99, 235, 0.04)',
+                          borderRadius: 2,
+                          borderLeft: '4px solid',
+                          borderLeftColor: 'primary.main'
+                        }}
+                      >
+                        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1, color: 'primary.main' }}>
+                          {goal.title}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          {goal.description}
+                        </Typography>
+                        
+                        <Stack spacing={1.5}>
+                          {sectionLines.slice(idx * 2, (idx + 1) * 2).map((line, lineIdx) => (
+                            <Box key={lineIdx} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                              <Box 
+                                sx={{ 
+                                  width: 6, 
+                                  height: 6, 
+                                  borderRadius: '50%', 
+                                  backgroundColor: 'primary.main',
+                                  mt: 1,
+                                  flexShrink: 0
+                                }} 
+                              />
+                              <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
+                                {line}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Stack>
+                ) : (
+                  // Show all recommendations for this type
+                  <Paper 
+                    elevation={0}
+                    sx={{ 
+                      p: 3, 
+                      backgroundColor: 'rgba(37, 99, 235, 0.04)',
+                      borderRadius: 2
+                    }}
+                  >
+                    <Stack spacing={1.5}>
+                      {sectionLines.map((line, lineIdx) => (
+                        <Box key={lineIdx} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                          <Box 
+                            sx={{ 
+                              width: 6, 
+                              height: 6, 
+                              borderRadius: '50%', 
+                              backgroundColor: 'primary.main',
+                              mt: 1,
+                              flexShrink: 0
+                            }} 
+                          />
+                          <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
+                            {line}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+                )
+              ) : (
+                <Alert severity="info">
+                  Loading {meta.title.toLowerCase()}...
+                </Alert>
+              )}
+            </AccordionDetails>
+          </Accordion>
+        )
+      })}
+    </Stack>
+  )
+}
+
+// Simple bullet list recommendations (kept for backward compatibility)
 function BulletList({ text }) {
   if (!text) return (
     <Alert severity="info" icon={<LightbulbIcon />}>
@@ -229,7 +420,7 @@ function Sustainability({ goals = [], forecastData = null, recommendations = '',
               <CircularProgress />
             </Box>
           ) : (
-            <BulletList text={goalRecommendations} />
+            <RecommendationsByType goals={normalizedGoals} forecastData={forecastData} />
           )}
         </CardContent>
       </Card>
