@@ -80,7 +80,7 @@ function RecommendationsByType({ goals = [], forecastData = null }) {
     'goals': {
       icon: '📊',
       title: 'Goals-Focused Recommendations',
-      description: '2 specific recommendations per goal',
+      description: 'Actionable recommendations aligned with your sustainability goals',
       lines: goalsLines
     },
     'co-benefit': {
@@ -142,9 +142,9 @@ function RecommendationsByType({ goals = [], forecastData = null }) {
                         <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1, color: 'primary.main' }}>
                           {goal.title}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        {/* <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                           {goal.description}
-                        </Typography>
+                        </Typography> */}
                         
                         <Stack spacing={1.5}>
                           {sectionLines.slice(idx * 2, (idx + 1) * 2).map((line, lineIdx) => (
