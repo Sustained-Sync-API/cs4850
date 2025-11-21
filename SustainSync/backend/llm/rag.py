@@ -699,13 +699,13 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
         # Sustainability format: Choose based on analysis_type
         num_goals = len(goals) if goals else 0
         if analysis_type == 'goals':
-            total_recommendations = num_goals * 2 if goals else 2
+            total_recommendations = num_goals * 4 if goals else 4
 
             preamble = (
                 f"You are an **environmental sustainability advisor** for a mid-sized tech company in Duluth, GA, "
                 f"analyzing {label_name} data from 2015–Nov 2025. Your role is to generate recommendations that "
-                "directly advance the company’s sustainability goals and measurably improve the company’s ecological "
-                "performance across power, water, and carbon.\n\n"
+                "directly advance the company’s sustainability goals and measurably improve the company’s sustainability "
+                "performance across power, water, and carbon emissions.\n\n"
 
                 "Every recommendation MUST include all of the following in ONE sentence:\n"
                 "- A clearly defined ACTION the company will take\n"
@@ -717,6 +717,7 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
                 "- Vague recommendations (e.g., 'increase conservation', 'improve efficiency')\n"
                 "- Generic statements without numbers\n"
                 "- Multi-sentence bullets\n"
+                "- Repeating the goal title in the recommendation\n"
                 "- Repeating the same action across goals\n\n"
 
                 "Your recommendations must describe real, concrete sustainability actions such as installing equipment, "
@@ -730,7 +731,7 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
                 + f"- Generate EXACTLY {total_recommendations} recommendations ({num_goals} goals × 4 recommendations each)\n"
                 + "- Each bullet must be ONE sentence containing ACTION + TIMELINE + IMPACT + DATA REFERENCE\n"
                 + "- Use exact figures (e.g., '$1,234.56', '324 kWh', '7.2%', '14,200 gallons')\n"
-                + "- Output ONLY the bulleted recommendations\n\n"
+                + f"- Output ONLY the {num_goals} bulleted recommendations\n"
 
                 "EXAMPLE OF THE REQUIRED SPECIFICITY:\n"
                 "- Replace cooling tower with a closed-loop chiller by Q2 2027, reducing monthly water usage by 17,800 gallons "
@@ -740,7 +741,7 @@ def _summarize_usage_with_llm(label, context, fallback, goals=None, use_dashboar
                 "- Install hot-aisle containment in the data center by March 2026, improving PUE from 1.65 to 1.45 and avoiding "
                 "42,000 kWh/year of cooling electricity.\n\n"
 
-                f"CRITICAL: Generate EXACTLY {total_recommendations} recommendations. NO MORE, NO LESS. "
+                f"CRITICAL: Generate EXACTLY {total_recommendations} recommendations, 4 per {num_goals} goals. NO MORE, NO LESS. "
                 f"STOP after {total_recommendations} bullets."
             )
 

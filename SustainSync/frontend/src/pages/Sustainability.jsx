@@ -125,7 +125,7 @@ function RecommendationsByType({ goals = [], forecastData = null }) {
             <AccordionDetails>
               {sectionLines.length > 0 ? (
                 typeGoals.length > 0 && type === 'goals' ? (
-                  // Goals type with actual goals: show 2 recs per goal
+                  // Goals type with actual goals: show 4 recs per goal
                   <Stack spacing={3}>
                     {typeGoals.map((goal, idx) => (
                       <Paper 
@@ -147,7 +147,7 @@ function RecommendationsByType({ goals = [], forecastData = null }) {
                         </Typography> */}
                         
                         <Stack spacing={1.5}>
-                          {sectionLines.slice(idx * 2, (idx + 1) * 2).map((line, lineIdx) => (
+                          {sectionLines.slice(idx * 4, (idx + 1) * 4).map((line, lineIdx) => (
                             <Box key={lineIdx} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
                               <Box 
                                 sx={{ 
